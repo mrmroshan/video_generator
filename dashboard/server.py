@@ -278,7 +278,66 @@ def swap_broll(job_id: str, scene_id: str):
     return job
 
 
-# ── Approve ───────────────────────────────────────────────────────────
+# ── Caption style ─────────────────────────────────────────────────────
+
+@app.get("/caption-styles")
+def get_caption_styles():
+    from renderer.captions import STYLES
+    return {
+        "styles": list(STYLES.keys()),
+        "default": "clean",
+        "descriptions": {
+            "clean":     "White bold, black outline, bottom center — YouTube standard",
+            "cinematic": "Yellow on dark bar, bottom center — film/documentary feel",
+            "tiktok":    "Giant white Impact, thick outline, screen center — viral style",
+            "minimal":   "Small light gray, subtle, bottom right — understated",
+        }
+    }
+
+
+class CaptionStylePayload(BaseModel):
+    caption_style: str
+
+
+@app.patch("/jobs/{job_id}/caption-style")
+def set_caption_style(job_id: str, payload: CaptionStylePayload):
+    from renderer.captions import STYLES
+    if payload.caption_style not in STYLES:
+        raise HTTPException(422, f"Unknown style '{payload.caption_style}'. Choose from: {list(STYLES.keys())}")
+    job = load_job(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    if job["status"] == "approved":
+        raise HTTPException(409, "Job is approved and locked")
+    job["caption_style"] = payload.caption_style
+    save_job(job)
+    return job
+
+
+# ── Render ────────────────────────────────────────────────────────────
+
+@app.post("/jobs/{job_id}/render")
+def render_job_endpoint(job_id: str):
+    """Trigger FFmpeg render with captions for an approved job."""
+    import time
+    from renderer.render import render_job
+
+    job = load_job(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    if job["status"] != "approved":
+        raise HTTPException(409, f"Job must be approved before rendering (status={job['status']})")
+
+    try:
+        update_status(job_id, "rendering")
+        output_path = render_job(job)
+        update_status(job_id, "done", {"output_path": output_path})
+        return load_job(job_id)
+    except Exception as e:
+        update_status(job_id, "failed")
+        raise HTTPException(500, f"Render failed: {e}")
+
+
 
 @app.post("/jobs/{job_id}/approve")
 def approve_job(job_id: str):
@@ -292,6 +351,19 @@ def approve_job(job_id: str):
 
 
 # ── Media streaming ───────────────────────────────────────────────────
+
+@app.get("/jobs/{job_id}/output")
+def download_output(job_id: str):
+    job = load_job(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    path = job.get("output_path")
+    if not path or not os.path.exists(path):
+        raise HTTPException(404, "Output MP4 not found — render first")
+    filename = f"{job.get('title','video')[:40].replace(' ','_')}.mp4"
+    return FileResponse(path, media_type="video/mp4",
+                        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
 
 @app.get("/jobs/{job_id}/scenes/{scene_id}/audio")
 def stream_audio(job_id: str, scene_id: str):

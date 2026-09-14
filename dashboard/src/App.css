@@ -343,7 +343,64 @@ body {
 }
 .btn-cancel:hover { background: #26263a; color: #ccc; }
 
-/* ── B-roll Replace button ────────────────────────────────────────── */
+/* ── Review actions (approve / render / download) ─────────────────── */
+.review-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+
+.btn-render {
+  background: #7c3aed; border: none; color: #fff;
+  padding: 9px 20px; border-radius: 8px; cursor: pointer;
+  font-size: 13px; font-weight: 700; transition: background .15s;
+}
+.btn-render:hover { background: #8b5cf6; }
+.btn-render:disabled { background: #2a1a4a; color: #6a4a8a; cursor: not-allowed; }
+
+.btn-download {
+  background: #059669; border: none; color: #fff;
+  padding: 9px 20px; border-radius: 8px; cursor: pointer;
+  font-size: 13px; font-weight: 700; text-decoration: none;
+  display: inline-block; transition: background .15s;
+}
+.btn-download:hover { background: #10b981; }
+
+/* ── Caption style picker ─────────────────────────────────────────── */
+.caption-picker {
+  background: #0e0e18; border: 1px solid #1e1e2e;
+  border-radius: 10px; padding: 12px 16px;
+  margin-bottom: 16px;
+}
+.caption-picker-label {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .8px; color: #555; margin-bottom: 10px;
+}
+.caption-picker-locked { color: #6366f1; background: rgba(99,102,241,.15); padding: 1px 6px; border-radius: 3px; }
+.caption-picker-saving { color: #f59e0b; }
+
+.caption-picker-grid {
+  display: flex; gap: 8px; flex-wrap: wrap;
+}
+
+.caption-style-btn {
+  display: flex; align-items: center; gap: 6px;
+  background: #13131c; border: 1px solid #2a2a3a;
+  color: #888; padding: 8px 14px; border-radius: 7px;
+  cursor: pointer; font-size: 12px; font-weight: 600;
+  transition: all .15s; position: relative;
+}
+.caption-style-btn:hover:not(:disabled) { border-color: #6366f1; color: #c7d2fe; background: #1a1a2e; }
+.caption-style-btn--active { border-color: #6366f1 !important; color: #a5b4fc !important; background: rgba(99,102,241,.12) !important; }
+.caption-style-btn--locked { cursor: default; opacity: .6; }
+.style-icon { font-size: 15px; }
+.style-label { }
+.style-check { color: #6366f1; font-weight: 800; margin-left: 2px; }
+
+.caption-preview {
+  margin-top: 12px;
+  border: 1px solid #1e1e2e; border-radius: 7px; overflow: hidden;
+}
+.caption-preview-frame {
+  width: 100%; height: 110px; position: relative;
+}
 .btn-replace-broll {
   width: 100%; margin-top: 8px;
   background: #1a1a2e; border: 1px solid #2a2a4a;
