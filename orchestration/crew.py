@@ -61,6 +61,26 @@ def generate_script(topic: str, platform: str) -> dict:
         return _mock_blueprint(topic, platform)
 
 
+def _get_claude_cmd() -> str:
+    """Auto-discover claude CLI path. Uses CLAUDE_CMD env var as override."""
+    import shutil
+    override = os.environ.get("CLAUDE_CMD", "")
+    if override and os.path.exists(override):
+        return override
+    # Auto-discover via PATH (works cross-platform)
+    found = shutil.which("claude") or shutil.which("claude.cmd")
+    if found:
+        return found
+    # Windows default fallback
+    default = r"C:\Users\roshan\AppData\Roaming\npm\claude.cmd"
+    if os.path.exists(default):
+        return default
+    raise RuntimeError(
+        "claude CLI not found. Set CLAUDE_CMD env var or install: "
+        "npm install -g @anthropic-ai/claude-code"
+    )
+
+
 def _generate_with_claude(topic: str, platform: str) -> dict:
     """Call claude -p to generate the script JSON using Claude Max subscription."""
     import tempfile
@@ -71,10 +91,7 @@ def _generate_with_claude(topic: str, platform: str) -> dict:
         platform_rules=PLATFORM_RULES.get(platform, PLATFORM_RULES["youtube"]),
     )
 
-    claude_cmd = os.environ.get(
-        "CLAUDE_CMD",
-        r"C:\Users\roshan\AppData\Roaming\npm\claude.cmd"
-    )
+    claude_cmd = _get_claude_cmd()
 
     print(f"🤖 Generating script via Claude Max for: '{topic}' ({platform})")
 
@@ -143,8 +160,8 @@ def _assemble_job(script: dict, topic: str, platform: str) -> dict:
             "platform": platform,
         })
 
-    # Determine renderer: use remotion for animated captions, ffmpeg otherwise
-    renderer = "remotion" if platform == "tiktok" else "ffmpeg"
+    # Renderer: always ffmpeg — Remotion not yet wired
+    renderer = "ffmpeg"
 
     return {
         "job_id": job_id,

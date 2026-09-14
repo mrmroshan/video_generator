@@ -1,0 +1,19 @@
+# VIDEO MAKER — Python dependencies
+# Install: pip install -r requirements.txt
+
+# Web server
+fastapi>=0.100.0
+uvicorn[standard]>=0.22.0
+python-multipart>=0.0.6
+
+# Speech recognition (word-level timestamps for karaoke captions)
+faster-whisper>=1.0.0
+
+# Dev / testing
+pytest>=7.0.0
+pytest-mock>=3.0.0
+httpx>=0.24.0
+
+# System dependencies (not pip-installable, install separately):
+# ffmpeg >= 5.0  ->  https://ffmpeg.org/download.html
+# claude CLI     ->  npm install -g @anthropic-ai/claude-code

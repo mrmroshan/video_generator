@@ -8,13 +8,13 @@ export default function SceneCard({ scene, sceneIndex, jobId, jobStatus, onUpdat
   const [editing, setEditing]         = useState(false)
   const [saving, setSaving]           = useState(false)
   const [showPicker, setShowPicker]   = useState(false)
-  const locked = jobStatus === 'approved'
+  const locked = jobStatus === 'approved' || jobStatus === 'done'
 
   useEffect(() => {
     setCaption(scene.voiceover_text)
     setBrollPrompt(scene.broll_prompt)
     setDuration(scene.target_duration_seconds)
-  }, [scene])
+  }, [scene.scene_id, scene.voiceover_text, scene.broll_prompt, scene.target_duration_seconds])
 
   const saveChanges = async () => {
     setSaving(true)

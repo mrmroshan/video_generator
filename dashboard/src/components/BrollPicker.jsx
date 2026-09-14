@@ -12,8 +12,10 @@ export default function BrollPicker({ scene, jobId, onPicked, onClose }) {
   // Auto-search on open with existing prompt
   useEffect(() => {
     inputRef.current?.focus()
-    if (query.trim()) search(query)
-  }, [])
+    const initialQuery = scene.broll_prompt?.trim() || ''
+    if (initialQuery) search(initialQuery)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // intentional: run once on mount using stable prop value
 
   const search = async (q) => {
     if (!q.trim()) return

@@ -290,6 +290,18 @@ def make_karaoke_ass(
     adj = [{"word": w["word"], "start": ts(w["start"]), "end": ts(w["end"])}
            for w in words if w.get("word", "").strip()]
 
+    # Guard: empty word list (silence, very short audio, whitespace-only)
+    if not adj:
+        return (
+            "[Script Info]\nScriptType: v4.00+\nPlayResX: 1280\nPlayResY: 720\n\n"
+            "[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, "
+            "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, "
+            "Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
+            "Style: Base,Arial,52,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,"
+            "1,0,0,0,100,100,0,0,1,3.0,1.5,2,60,60,60,1\n\n"
+            "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+        )
+
     # Extend each word's display to the next word's start (covers gaps/pauses)
     for i in range(len(adj) - 1):
         adj[i]["disp_end"] = adj[i + 1]["start"]

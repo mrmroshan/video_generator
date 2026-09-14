@@ -47,9 +47,25 @@ export default function JobReview({ job, onBack, onUpdate }) {
     try {
       const res = await fetch(`/api/jobs/${job.job_id}/render`, { method: 'POST' })
       if (!res.ok) throw new Error(await res.text())
-      onUpdate(await res.json())
-    } catch (e) { alert('Render failed: ' + e.message) }
-    finally { setRendering(false) }
+
+      // Poll /render-status every 3 seconds until done or failed
+      const poll = setInterval(async () => {
+        try {
+          const sr = await fetch(`/api/jobs/${job.job_id}/render-status`)
+          if (!sr.ok) return
+          const data = await sr.json()
+          if (data.done || data.failed) {
+            clearInterval(poll)
+            setRendering(false)
+            const jr = await fetch(`/api/jobs/${job.job_id}`)
+            if (jr.ok) onUpdate(await jr.json())
+          }
+        } catch (_) { }
+      }, 3000)
+    } catch (e) {
+      alert('Render failed: ' + e.message)
+      setRendering(false)
+    }
   }
 
   const totalDuration = job.scenes?.reduce((s, sc) => s + (sc.target_duration_seconds || 0), 0) || 0
@@ -82,7 +98,7 @@ export default function JobReview({ job, onBack, onUpdate }) {
             </a>
           ) : locked ? (
             <button className="btn-render" onClick={render} disabled={rendering}>
-              {rendering ? '⏳ Rendering…' : '🎬 Render MP4'}
+              {rendering ? '⏳ Rendering… (checking every 3s)' : '🎬 Render MP4'}
             </button>
           ) : (
             <button className="btn-approve" onClick={approve} disabled={approving}>

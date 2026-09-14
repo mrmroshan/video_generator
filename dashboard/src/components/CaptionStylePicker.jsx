@@ -106,18 +106,44 @@ function CaptionPreview({ style }) {
       textShadow: '1px 1px 0 #000',
       position: 'absolute', bottom: 10, right: 12, textAlign: 'right', maxWidth: '70%',
     },
+    karaoke: {
+      fontFamily: 'Arial, sans-serif', fontWeight: 'bold',
+      fontSize: 20, color: '#fff',
+      textShadow: '2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000',
+      position: 'absolute', bottom: 16, left: 16, right: 16, textAlign: 'center',
+    },
+    karaoke_tiktok: {
+      fontFamily: 'Impact, Arial Narrow, sans-serif', fontWeight: 'normal',
+      fontSize: 24, color: '#fff',
+      textShadow: '3px 3px 0 #000, -3px -3px 0 #000, 3px -3px 0 #000, -3px 3px 0 #000',
+      position: 'absolute', top: '50%', left: 8, right: 8,
+      transform: 'translateY(-50%)', textAlign: 'center',
+    },
+    karaoke_fire: {
+      fontFamily: 'Arial, sans-serif', fontWeight: 'bold',
+      fontSize: 20, color: '#e0e0e0',
+      textShadow: '2px 2px 0 #000, -2px -2px 0 #000',
+      position: 'absolute', bottom: 16, left: 16, right: 16, textAlign: 'center',
+    },
   }
 
   return (
     <div className="caption-preview-frame">
       <div style={{ position: 'relative', width: '100%', height: '100%', background: '#111' }}>
-        {/* fake video bg */}
         <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <span style={{ color: '#333', fontSize: 11, fontStyle: 'italic' }}>video preview</span>
         </div>
-        <div style={styles[style]}>
-          {SAMPLE.slice(0, 52)}{SAMPLE.length > 52 ? '…' : ''}
-        </div>
+        {style.startsWith('karaoke') ? (
+          <div style={styles[style] || styles.karaoke}>
+            <span style={{color: '#fff'}}>You opened the app </span>
+            <span style={{color: '#FFFF00', fontWeight: 'bold'}}>for ten</span>
+            <span style={{color: '#fff'}}> seconds.</span>
+          </div>
+        ) : (
+          <div style={styles[style]}>
+            {SAMPLE.slice(0, 52)}{SAMPLE.length > 52 ? '…' : ''}
+          </div>
+        )}
       </div>
     </div>
   )

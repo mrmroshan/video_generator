@@ -22,9 +22,9 @@ if env_path.exists():
             line = line.strip()
             if line and not line.startswith("#") and "=" in line:
                 k, v = line.split("=", 1)
-                os.environ.setdefault(k.strip(), v.strip())
+                os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
@@ -129,6 +129,8 @@ def reorder_scenes(job_id: str, payload: ReorderPayload):
 
 @app.get("/jobs/{job_id}/scenes/{scene_id}/search-broll")
 def search_broll(job_id: str, scene_id: str, q: str, limit: int = 6):
+    if not q or not q.strip():
+        raise HTTPException(422, "Search query 'q' cannot be empty")
     job = load_job(job_id)
     if not job:
         raise HTTPException(404, "Job not found")
@@ -188,6 +190,12 @@ class PickBrollPayload(BaseModel):
 
 @app.post("/jobs/{job_id}/scenes/{scene_id}/pick-broll")
 def pick_broll(job_id: str, scene_id: str, payload: PickBrollPayload):
+    import urllib.parse as _urlparse
+    # SSRF guard: only allow Pexels CDN URLs
+    parsed = _urlparse.urlparse(payload.download_url)
+    allowed_hosts = {"videos.pexels.com", "www.pexels.com", "images.pexels.com"}
+    if parsed.scheme not in ("https", "http") or parsed.hostname not in allowed_hosts:
+        raise HTTPException(422, f"download_url must be a Pexels CDN URL (got: {parsed.hostname!r})")
     job = load_job(job_id)
     if not job:
         raise HTTPException(404, "Job not found")
@@ -403,9 +411,8 @@ def download_export(job_id: str, platform: str):
 # ── Approve ────────────────────────────────────────────────────────────
 
 @app.post("/jobs/{job_id}/render")
-def render_job_endpoint(job_id: str):
-    """Trigger FFmpeg render with captions for an approved job."""
-    import time
+def render_job_endpoint(job_id: str, background_tasks: BackgroundTasks):
+    """Kick off FFmpeg render as a background task. Returns 200 immediately."""
     from renderer.render import render_job
 
     job = load_job(job_id)
@@ -414,14 +421,41 @@ def render_job_endpoint(job_id: str):
     if job["status"] != "approved":
         raise HTTPException(409, f"Job must be approved before rendering (status={job['status']})")
 
-    try:
-        update_status(job_id, "rendering")
-        output_path = render_job(job)
-        update_status(job_id, "done", {"output_path": output_path})
-        return load_job(job_id)
-    except Exception as e:
-        update_status(job_id, "failed")
-        raise HTTPException(500, f"Render failed: {e}")
+    update_status(job_id, "rendering")
+
+    def _do_render(job_id: str):
+        try:
+            job = load_job(job_id)
+            output_path = render_job(job)
+            update_status(job_id, "done", {"output_path": output_path})
+        except Exception as e:
+            print(f"[ERROR] Render failed for {job_id}: {e}")
+            try:
+                update_status(job_id, "failed")
+            except Exception:
+                pass
+
+    background_tasks.add_task(_do_render, job_id)
+    return {
+        "status": "rendering",
+        "job_id": job_id,
+        "message": "Render started in background. Poll GET /jobs/{job_id}/render-status for completion."
+    }
+
+
+@app.get("/jobs/{job_id}/render-status")
+def render_status(job_id: str):
+    """Lightweight polling endpoint for render progress."""
+    job = load_job(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    return {
+        "job_id":      job_id,
+        "status":      job["status"],
+        "output_path": job.get("output_path"),
+        "done":        job["status"] == "done",
+        "failed":      job["status"] == "failed",
+    }
 
 
 
@@ -430,8 +464,8 @@ def approve_job(job_id: str):
     job = load_job(job_id)
     if not job:
         raise HTTPException(404, f"Job not found: {job_id}")
-    if job["status"] == "approved":
-        return job  # idempotent
+    if job["status"] in ("approved", "done", "rendering"):
+        raise HTTPException(409, f"Cannot approve a job with status '{job['status']}'")
     update_status(job_id, "approved", {"approved_at": datetime.now(timezone.utc).isoformat()})
     return load_job(job_id)
 

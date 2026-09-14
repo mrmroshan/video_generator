@@ -301,17 +301,6 @@ body {
   color: #333; font-size: 12px;
 }
 
-.broll-actions { display: flex; align-items: center; gap: 8px; }
-.btn-swap {
-  flex: 1; background: #1e1e2e; border: none; color: #888;
-  padding: 7px; border-radius: 6px; cursor: pointer; font-size: 12px;
-  transition: background .15s, color .15s;
-}
-.btn-swap:hover { background: #26263a; color: #e2e2ee; }
-.btn-swap:disabled { opacity: .45; cursor: not-allowed; }
-.swap-success { font-size: 11px; color: #4caf6e; }
-.swap-error   { font-size: 11px; color: #f08080; }
-
 .scene-edit-col { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
 
 .field-group { display: flex; flex-direction: column; gap: 5px; }
@@ -410,7 +399,9 @@ body {
 }
 .btn-replace-broll:hover { background: #22223a; border-color: #6366f1; color: #c7d2fe; }
 
-/* ── BrollPicker modal ────────────────────────────────────────────── */
+.status-distributing { background: #0a1826; color: #60a5fa; }
+
+/* ── B-roll Replace button ────────────────────────────────────────── */
 .picker-backdrop {
   position: fixed; inset: 0; z-index: 1000;
   background: rgba(0,0,0,.75);
