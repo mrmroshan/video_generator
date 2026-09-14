@@ -127,7 +127,8 @@ def _render_ffmpeg(job: dict, caption_style: str = None) -> str:
         if use_karaoke and scene.get("timestamps"):
             from renderer.captions import burn_karaoke
             burn_karaoke(composed, scene["timestamps"], audio_dur,
-                         style=caption_style, out_path=captioned)
+                         style=caption_style, out_path=captioned,
+                         audio_path=ap)   # pass original MP3 for offset detection
         else:
             from renderer.captions import burn_captions
             static = caption_style if not use_karaoke else "clean"

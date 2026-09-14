@@ -264,23 +264,41 @@ def make_karaoke_ass(
     total_duration: float,
     style_name: str = "karaoke",
     line_max_chars: int = 30,
+    audio_offset: float = 0.0,   # MP3 start_time offset — shift all timestamps forward
 ) -> str:
     """
     Generate an ASS subtitle file with word-by-word karaoke highlighting.
 
-    Each word gets its own Dialogue line spanning the full sentence display window.
-    The active word is rendered in `active_color`; all other visible words are `rest_color`.
-    Words appear one line (phrase) at a time — the line breaks when a phrase exceeds `line_max_chars`.
-
-    This produces the viral TikTok caption effect.
+    Sync fixes applied here:
+    - audio_offset: compensates for MP3 start_time (e.g. 0.025s) so timestamps
+      align with the composed video's 0-based timeline
+    - Each word's Dialogue extends to the NEXT word's start (no blank gaps during
+      natural speech pauses)
+    - Last word of each phrase extends to the next phrase's first word start
+      (caption stays visible across sentence boundaries)
+    - Phrases fade in at start, fade out only at the very end
     """
     st = KARAOKE_STYLES.get(style_name, KARAOKE_STYLES["karaoke"])
+
+    # Apply offset: Whisper timestamps are relative to the raw audio start;
+    # the composed video resets to t=0, so subtract the MP3 start_time offset.
+    def ts(t):
+        return max(0.0, t - audio_offset)
+
+    # ── Build a flat list of all words with adjusted timestamps ──────
+    adj = [{"word": w["word"], "start": ts(w["start"]), "end": ts(w["end"])}
+           for w in words if w.get("word", "").strip()]
+
+    # Extend each word's display to the next word's start (covers gaps/pauses)
+    for i in range(len(adj) - 1):
+        adj[i]["disp_end"] = adj[i + 1]["start"]
+    adj[-1]["disp_end"] = min(total_duration, adj[-1]["end"] + 1.5)  # hold last word
 
     # ── Split words into phrase groups ────────────────────────────────
     phrases = []
     current = []
     char_count = 0
-    for w in words:
+    for w in adj:
         if char_count + len(w["word"]) + 1 > line_max_chars and current:
             phrases.append(current)
             current = [w]
@@ -290,6 +308,11 @@ def make_karaoke_ass(
             char_count += len(w["word"]) + 1
     if current:
         phrases.append(current)
+
+    # Extend last word of each phrase to reach next phrase's first word
+    for pi in range(len(phrases) - 1):
+        next_phrase_start = phrases[pi + 1][0]["start"]
+        phrases[pi][-1]["disp_end"] = next_phrase_start
 
     # ── Build ASS header ──────────────────────────────────────────────
     ass_lines = [
@@ -306,7 +329,6 @@ def make_karaoke_ass(
         "Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
     ]
 
-    # Base style (rest words color)
     ass_lines.append(
         f"Style: Base,{st['font']},{st['size']},"
         f"{st['rest_color']},{st['rest_color']},"
@@ -320,20 +342,17 @@ def make_karaoke_ass(
                   "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"]
 
     # ── Build one Dialogue per word ───────────────────────────────────
-    for phrase in phrases:
-        phrase_start = phrase[0]["start"]
-        phrase_end   = phrase[-1]["end"]
-
+    is_last_phrase = len(phrases) - 1
+    for pi, phrase in enumerate(phrases):
         for active_idx, active_word in enumerate(phrase):
-            w_start = active_word["start"]
-            w_end   = active_word["end"]
+            w_start   = active_word["start"]
+            w_end     = active_word["disp_end"]   # extended to cover gap
 
-            # Build the line: dim words before, HIGHLIGHT active, dim words after
+            # Build line: rest words white, active word highlighted
             parts = []
             for i, w in enumerate(phrase):
                 word_text = w["word"]
                 if i == active_idx:
-                    # Active: switch to highlight color
                     parts.append(
                         f"{{\\c{st['active_color']}\\an{st['alignment']}}}{word_text}"
                         f"{{\\c{st['rest_color']}}}"
@@ -342,8 +361,11 @@ def make_karaoke_ass(
                     parts.append(word_text)
 
             line_text = " ".join(parts)
-            fade_in  = 80 if active_idx == 0 else 0
-            fade_out = 80 if active_idx == len(phrase) - 1 else 0
+
+            # Fade in on first word of phrase, fade out on last word of last phrase only
+            fade_in  = 80  if active_idx == 0 else 0
+            is_last_word = (pi == is_last_phrase and active_idx == len(phrase) - 1)
+            fade_out = 120 if is_last_word else 0
 
             ass_lines.append(
                 f"Dialogue: 0,{_fmt_time(w_start)},{_fmt_time(w_end)},"
@@ -360,15 +382,34 @@ def burn_karaoke(
     total_duration: float,
     style: str = "karaoke",
     out_path: str = None,
+    audio_path: str = None,   # if supplied, auto-detect MP3 start_time offset
 ) -> str:
     """
     Burn word-by-word karaoke captions into a video clip.
     `words` = list of {"word", "start", "end"} from Whisper.
+    `audio_path` = original MP3 — used to measure start_time offset automatically.
     """
     if not out_path:
         out_path = video_path.replace("_composed.mp4", "_captioned.mp4")
 
-    ass_content = make_karaoke_ass(words, total_duration, style_name=style)
+    # Auto-detect MP3 start_time offset (ElevenLabs MP3s often have ~25ms offset)
+    audio_offset = 0.0
+    if audio_path and os.path.exists(audio_path):
+        try:
+            import subprocess as _sp, json as _json
+            r = _sp.run(
+                ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_streams", audio_path],
+                capture_output=True, text=True
+            )
+            for s in _json.loads(r.stdout).get("streams", []):
+                if s.get("codec_type") == "audio":
+                    audio_offset = float(s.get("start_time", 0.0))
+                    break
+        except Exception:
+            pass
+
+    ass_content = make_karaoke_ass(words, total_duration, style_name=style,
+                                   audio_offset=audio_offset)
     ass_file    = video_path + ".karaoke.ass"
     with open(ass_file, "w", encoding="utf-8") as f:
         f.write(ass_content)
