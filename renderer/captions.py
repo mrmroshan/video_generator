@@ -106,11 +106,12 @@ DEFAULT_STYLE = "clean"
 # ── ASS file generation ───────────────────────────────────────────────
 
 def _fmt_time(seconds: float) -> str:
-    """Convert float seconds to ASS timestamp H:MM:SS.cc"""
-    h  = int(seconds // 3600)
-    m  = int((seconds % 3600) // 60)
-    s  = int(seconds % 60)
-    cs = int((seconds - int(seconds)) * 100)
+    """Convert float seconds to ASS timestamp H:MM:SS.cc  (round to avoid float precision errors)."""
+    total_cs = round(seconds * 100)   # centiseconds, rounded — avoids 1.20→1.19 fp issues
+    cs = total_cs % 100
+    s  = (total_cs // 100) % 60
+    m  = (total_cs // 6000) % 60
+    h  = total_cs // 360000
     return f"{h}:{m:02d}:{s:02d}.{cs:02d}"
 
 
