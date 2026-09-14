@@ -335,10 +335,12 @@ def get_platforms():
 @app.post("/jobs/{job_id}/export/{platform}")
 def export_single_platform(job_id: str, platform: str):
     """Export the master to a specific platform size. Render must exist."""
-    from renderer.render import export_platform, _canonical_platform, PLATFORMS
-    canon = _canonical_platform(platform)
-    if canon not in PLATFORMS:
-        raise HTTPException(422, f"Unknown platform '{platform}'")
+    from renderer.render import export_platform, _canonical_platform, PLATFORMS, PLATFORM_ALIASES
+    # Reject anything that isn't a known key or alias
+    raw = platform.lower().strip()
+    if raw not in PLATFORMS and raw not in PLATFORM_ALIASES:
+        raise HTTPException(422, f"Unknown platform '{platform}'. Choose from: {sorted(PLATFORMS)}")
+    canon = _canonical_platform(raw)
     job = load_job(job_id)
     if not job:
         raise HTTPException(404, "Job not found")
