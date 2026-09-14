@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "VideoJob",
+  "description": "Master job blueprint for a full video generation run",
+  "type": "object",
+  "required": ["job_id", "status", "platform", "title", "description", "hashtags", "scenes", "created_at"],
+  "properties": {
+    "job_id": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "generating_assets", "in_review", "approved", "rendering", "distributing", "done", "failed"]
+    },
+    "platform": { "type": "string", "enum": ["youtube", "tiktok"] },
+    "title": { "type": "string" },
+    "description": { "type": "string" },
+    "hashtags": { "type": "array", "items": { "type": "string" } },
+    "scenes": {
+      "type": "array",
+      "items": { "$ref": "scene.json" },
+      "minItems": 1
+    },
+    "renderer": {
+      "type": "string",
+      "enum": ["remotion", "ffmpeg"],
+      "description": "Auto-selected based on caption animation requirement"
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "approved_at": { "type": ["string", "null"], "format": "date-time" },
+    "output_path": { "type": ["string", "null"] }
+  }
+}

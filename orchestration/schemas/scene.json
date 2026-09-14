@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "VideoScene",
+  "description": "A single scene in the video blueprint",
+  "type": "object",
+  "required": ["scene_id", "voiceover_text", "target_duration_seconds", "broll_prompt", "platform"],
+  "properties": {
+    "scene_id": {
+      "type": "string",
+      "description": "Unique scene identifier e.g. scene_01"
+    },
+    "voiceover_text": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The spoken text for this scene"
+    },
+    "target_duration_seconds": {
+      "type": "number",
+      "minimum": 1,
+      "description": "Intended duration in seconds"
+    },
+    "broll_prompt": {
+      "type": "string",
+      "minLength": 10,
+      "description": "Specific prompt used to search Pexels or generate AI B-roll"
+    },
+    "platform": {
+      "type": "string",
+      "enum": ["youtube", "tiktok"],
+      "description": "Target platform — affects pacing and hook style"
+    }
+  },
+  "additionalProperties": false
+}

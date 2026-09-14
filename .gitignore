@@ -1,0 +1,27 @@
+# Secrets
+.env
+
+# Job data (large media files)
+data/jobs/
+data/*.db
+*.db
+
+# Build artefacts
+dashboard/dist/
+dashboard/node_modules/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+
+# Temp render artefacts
+*.bat
+concat.txt
+*_composed.mp4
+
+# OS
+.DS_Store
+Thumbs.db
