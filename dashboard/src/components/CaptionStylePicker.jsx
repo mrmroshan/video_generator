@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react'
 
 const STYLE_META = {
-  clean:     { icon: '📺', label: 'Clean',     desc: 'White bold · black outline · bottom center' },
-  cinematic: { icon: '🎬', label: 'Cinematic', desc: 'Yellow on dark bar · documentary feel' },
-  tiktok:    { icon: '📱', label: 'TikTok',    desc: 'Giant Impact · thick outline · screen center' },
-  minimal:   { icon: '🤍', label: 'Minimal',   desc: 'Small gray · no outline · understated' },
+  clean:          { icon: '📺', label: 'Clean',     desc: 'White bold · black outline · bottom' },
+  cinematic:      { icon: '🎬', label: 'Cinematic', desc: 'Yellow on dark bar · documentary' },
+  tiktok:         { icon: '📱', label: 'TikTok',    desc: 'Giant Impact · thick outline · center' },
+  minimal:        { icon: '🤍', label: 'Minimal',   desc: 'Small gray · no outline · subtle' },
+  karaoke:        { icon: '✨', label: 'Karaoke',   desc: 'Word-by-word highlight · yellow · bottom' },
+  karaoke_tiktok: { icon: '🔥', label: 'KTV TikTok', desc: 'Word highlight · Impact · center screen' },
+  karaoke_fire:   { icon: '🌶', label: 'KTV Fire',   desc: 'Word highlight · orange · dramatic' },
 }
 
 export default function CaptionStylePicker({ job, onUpdate }) {

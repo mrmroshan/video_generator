@@ -282,15 +282,18 @@ def swap_broll(job_id: str, scene_id: str):
 
 @app.get("/caption-styles")
 def get_caption_styles():
-    from renderer.captions import STYLES
+    from renderer.captions import STYLES, KARAOKE_STYLES
     return {
-        "styles": list(STYLES.keys()),
+        "styles": list(STYLES.keys()) + list(KARAOKE_STYLES.keys()),
         "default": "clean",
         "descriptions": {
-            "clean":     "White bold, black outline, bottom center — YouTube standard",
-            "cinematic": "Yellow on dark bar, bottom center — film/documentary feel",
-            "tiktok":    "Giant white Impact, thick outline, screen center — viral style",
-            "minimal":   "Small light gray, subtle, bottom right — understated",
+            "clean":          "White bold, black outline, bottom center — YouTube standard",
+            "cinematic":      "Yellow on dark bar, bottom center — film/documentary feel",
+            "tiktok":         "Giant Impact, thick outline, screen center — viral style",
+            "minimal":        "Small light gray, subtle, bottom right — understated",
+            "karaoke":        "✨ Word-by-word highlight (yellow), bottom center",
+            "karaoke_tiktok": "✨ Word-by-word highlight, Impact font, screen center",
+            "karaoke_fire":   "✨ Word-by-word highlight (orange), dramatic",
         }
     }
 
@@ -301,9 +304,10 @@ class CaptionStylePayload(BaseModel):
 
 @app.patch("/jobs/{job_id}/caption-style")
 def set_caption_style(job_id: str, payload: CaptionStylePayload):
-    from renderer.captions import STYLES
-    if payload.caption_style not in STYLES:
-        raise HTTPException(422, f"Unknown style '{payload.caption_style}'. Choose from: {list(STYLES.keys())}")
+    from renderer.captions import STYLES, KARAOKE_STYLES
+    all_styles = set(STYLES.keys()) | set(KARAOKE_STYLES.keys())
+    if payload.caption_style not in all_styles:
+        raise HTTPException(422, f"Unknown style '{payload.caption_style}'. Choose from: {sorted(all_styles)}")
     job = load_job(job_id)
     if not job:
         raise HTTPException(404, "Job not found")

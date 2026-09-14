@@ -60,7 +60,7 @@ def _render_ffmpeg(job: dict, caption_style: str = None) -> str:
     from renderer.captions import burn_captions, STYLES
 
     style    = caption_style or job.get("caption_style", DEFAULT_CAPTION_STYLE)
-    if style not in STYLES:
+    if style not in STYLES and not style.startswith("karaoke"):
         style = DEFAULT_CAPTION_STYLE
 
     job_id   = job["job_id"]
@@ -108,10 +108,31 @@ def _render_ffmpeg(job: dict, caption_style: str = None) -> str:
         if r.returncode != 0:
             raise RuntimeError(f"Compose failed for {sid}:\n{r.stderr[-400:]}")
 
-        # Step 2: burn captions
+        # Step 2: extract word timestamps (for karaoke) or skip
+        caption_style = caption_style or job.get("caption_style", DEFAULT_CAPTION_STYLE)
+        use_karaoke = caption_style.startswith("karaoke")
+
+        if use_karaoke and not scene.get("timestamps"):
+            print(f"  {sid} Whisper timestamps...", end=" ", flush=True)
+            try:
+                from audio.timestamps import extract_timestamps
+                extract_timestamps(scene)
+                print(f"{len(scene.get('timestamps', []))} words")
+            except Exception as e:
+                print(f"WARN ({e}) — falling back to static captions")
+                use_karaoke = False
+
+        # Step 3: burn captions
         captioned = os.path.join(job_dir, f"{sid}_captioned.mp4")
-        caption_text = scene.get("voiceover_text", "")
-        burn_captions(composed, caption_text, audio_dur, style=style, out_path=captioned)
+        if use_karaoke and scene.get("timestamps"):
+            from renderer.captions import burn_karaoke
+            burn_karaoke(composed, scene["timestamps"], audio_dur,
+                         style=caption_style, out_path=captioned)
+        else:
+            from renderer.captions import burn_captions
+            static = caption_style if not use_karaoke else "clean"
+            burn_captions(composed, scene.get("voiceover_text", ""), audio_dur,
+                          style=static, out_path=captioned)
 
         sz = os.path.getsize(captioned) // 1024
         print(f"{sz}KB ✓")

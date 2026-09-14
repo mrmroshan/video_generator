@@ -207,7 +207,238 @@ def burn_captions(
     return out_path
 
 
+# ── Karaoke styles ────────────────────────────────────────────────────
+
+KARAOKE_STYLES = {
+    "karaoke": {
+        # active word (highlighted)
+        "font":         "Arial",
+        "size":         60,
+        "active_color": "&H0000FFFF",   # yellow
+        "rest_color":   "&H00FFFFFF",   # white
+        "outline_col":  "&H00000000",   # black outline
+        "back_col":     "&H00000000",
+        "bold":         1,
+        "outline":      3.5,
+        "shadow":       2.0,
+        "alignment":    2,              # bottom center
+        "margin_v":     80,
+        "margin_l":     60,
+        "margin_r":     60,
+    },
+    "karaoke_tiktok": {
+        "font":         "Impact",
+        "size":         78,
+        "active_color": "&H0000FFFF",   # yellow
+        "rest_color":   "&H00FFFFFF",   # white
+        "outline_col":  "&H00000000",
+        "back_col":     "&H00000000",
+        "bold":         0,
+        "outline":      5.0,
+        "shadow":       2.0,
+        "alignment":    5,              # center screen
+        "margin_v":     0,
+        "margin_l":     40,
+        "margin_r":     40,
+    },
+    "karaoke_fire": {
+        "font":         "Arial",
+        "size":         64,
+        "active_color": "&H000080FF",   # orange-red
+        "rest_color":   "&H00E0E0E0",   # light gray
+        "outline_col":  "&H00000000",
+        "back_col":     "&H00000000",
+        "bold":         1,
+        "outline":      3.0,
+        "shadow":       2.0,
+        "alignment":    2,
+        "margin_v":     80,
+        "margin_l":     60,
+        "margin_r":     60,
+    },
+}
+
+
+def make_karaoke_ass(
+    words: list,          # [{"word": str, "start": float, "end": float}, ...]
+    total_duration: float,
+    style_name: str = "karaoke",
+    line_max_chars: int = 30,
+) -> str:
+    """
+    Generate an ASS subtitle file with word-by-word karaoke highlighting.
+
+    Each word gets its own Dialogue line spanning the full sentence display window.
+    The active word is rendered in `active_color`; all other visible words are `rest_color`.
+    Words appear one line (phrase) at a time — the line breaks when a phrase exceeds `line_max_chars`.
+
+    This produces the viral TikTok caption effect.
+    """
+    st = KARAOKE_STYLES.get(style_name, KARAOKE_STYLES["karaoke"])
+
+    # ── Split words into phrase groups ────────────────────────────────
+    phrases = []
+    current = []
+    char_count = 0
+    for w in words:
+        if char_count + len(w["word"]) + 1 > line_max_chars and current:
+            phrases.append(current)
+            current = [w]
+            char_count = len(w["word"])
+        else:
+            current.append(w)
+            char_count += len(w["word"]) + 1
+    if current:
+        phrases.append(current)
+
+    # ── Build ASS header ──────────────────────────────────────────────
+    ass_lines = [
+        "[Script Info]",
+        "ScriptType: v4.00+",
+        "PlayResX: 1280",
+        "PlayResY: 720",
+        "WrapStyle: 0",
+        "ScaledBorderAndShadow: yes",
+        "",
+        "[V4+ Styles]",
+        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, "
+        "Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, "
+        "Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
+    ]
+
+    # Base style (rest words color)
+    ass_lines.append(
+        f"Style: Base,{st['font']},{st['size']},"
+        f"{st['rest_color']},{st['rest_color']},"
+        f"{st['outline_col']},{st['back_col']},"
+        f"{st['bold']},0,0,0,100,100,0,0,1,"
+        f"{st['outline']},{st['shadow']},"
+        f"{st['alignment']},{st['margin_l']},{st['margin_r']},{st['margin_v']},1"
+    )
+
+    ass_lines += ["", "[Events]",
+                  "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"]
+
+    # ── Build one Dialogue per word ───────────────────────────────────
+    for phrase in phrases:
+        phrase_start = phrase[0]["start"]
+        phrase_end   = phrase[-1]["end"]
+
+        for active_idx, active_word in enumerate(phrase):
+            w_start = active_word["start"]
+            w_end   = active_word["end"]
+
+            # Build the line: dim words before, HIGHLIGHT active, dim words after
+            parts = []
+            for i, w in enumerate(phrase):
+                word_text = w["word"]
+                if i == active_idx:
+                    # Active: switch to highlight color
+                    parts.append(
+                        f"{{\\c{st['active_color']}\\an{st['alignment']}}}{word_text}"
+                        f"{{\\c{st['rest_color']}}}"
+                    )
+                else:
+                    parts.append(word_text)
+
+            line_text = " ".join(parts)
+            fade_in  = 80 if active_idx == 0 else 0
+            fade_out = 80 if active_idx == len(phrase) - 1 else 0
+
+            ass_lines.append(
+                f"Dialogue: 0,{_fmt_time(w_start)},{_fmt_time(w_end)},"
+                f"Base,,0,0,0,"
+                f",{{\\fad({fade_in},{fade_out})}}{line_text}"
+            )
+
+    return "\n".join(ass_lines) + "\n"
+
+
+def burn_karaoke(
+    video_path: str,
+    words: list,
+    total_duration: float,
+    style: str = "karaoke",
+    out_path: str = None,
+) -> str:
+    """
+    Burn word-by-word karaoke captions into a video clip.
+    `words` = list of {"word", "start", "end"} from Whisper.
+    """
+    if not out_path:
+        out_path = video_path.replace("_composed.mp4", "_captioned.mp4")
+
+    ass_content = make_karaoke_ass(words, total_duration, style_name=style)
+    ass_file    = video_path + ".karaoke.ass"
+    with open(ass_file, "w", encoding="utf-8") as f:
+        f.write(ass_content)
+
+    ass_escaped = ass_file.replace("\\", "/").replace(":", "\\:")
+    r = subprocess.run([
+        "ffmpeg", "-y",
+        "-i", video_path,
+        "-vf", f"ass='{ass_escaped}'",
+        "-c:v", "libx264", "-profile:v", "baseline", "-preset", "fast", "-crf", "22",
+        "-c:a", "copy",
+        out_path,
+    ], capture_output=True, text=True)
+
+    try:
+        os.unlink(ass_file)
+    except Exception:
+        pass
+
+    if r.returncode != 0:
+        raise RuntimeError(f"FFmpeg karaoke burn failed:\n{r.stderr[-500:]}")
+
+    return out_path
+
+
 # ── Scene pipeline helper ─────────────────────────────────────────────
+
+def burn_karaoke_for_job(job: dict, style: str = "karaoke") -> dict:
+    """
+    Burn karaoke captions into every composed scene that has word timestamps.
+    Falls back to static captions if timestamps are missing.
+    """
+    caption_style = job.get("caption_style", style)
+    use_karaoke = caption_style.startswith("karaoke")
+
+    for scene in job["scenes"]:
+        composed = scene.get("composed_path")
+        if not composed or not os.path.exists(composed):
+            print(f"  [SKIP] {scene['scene_id']} — no composed_path")
+            continue
+
+        dur = scene.get("actual_duration") or scene.get("target_duration_seconds", 5.0)
+        out = composed.replace("_composed.mp4", "_captioned.mp4")
+
+        timestamps = scene.get("timestamps", [])
+        if use_karaoke and timestamps:
+            print(f"  Burning karaoke [{caption_style}] → {scene['scene_id']} ({len(timestamps)} words)...", end=" ", flush=True)
+            try:
+                burn_karaoke(composed, timestamps, float(dur), style=caption_style, out_path=out)
+                scene["captioned_path"] = out
+                print(f"{os.path.getsize(out)//1024}KB ✓")
+            except Exception as e:
+                print(f"ERR: {e}")
+                scene["captioned_path"] = composed
+        else:
+            # Fall back to static captions
+            static_style = "clean" if not use_karaoke else "clean"
+            print(f"  Burning static [{static_style}] → {scene['scene_id']}...", end=" ", flush=True)
+            try:
+                burn_captions(composed, scene.get("voiceover_text", ""), float(dur),
+                              style=static_style, out_path=out)
+                scene["captioned_path"] = out
+                print(f"{os.path.getsize(out)//1024}KB ✓")
+            except Exception as e:
+                print(f"ERR: {e}")
+                scene["captioned_path"] = composed
+
+    return job
+
+
 
 def burn_captions_for_job(job: dict, style: str = "clean") -> dict:
     """
