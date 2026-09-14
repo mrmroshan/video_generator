@@ -84,6 +84,7 @@ export default function JobReview({ job, onBack, onUpdate }) {
         activeSceneId={activeScene}
         onSelectScene={handleSelectScene}
         onReorder={handleReorder}
+        onJobUpdate={onUpdate}
         locked={locked}
       />
 

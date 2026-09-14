@@ -5,7 +5,10 @@ Decision is driven by job config, not hardcoded.
 import os
 import subprocess
 
-JOBS_DIR = os.getenv("JOBS_DIR", "./data/jobs")
+from pathlib import Path
+
+_ROOT = Path(__file__).parent.parent
+JOBS_DIR = os.getenv("JOBS_DIR", str(_ROOT / "data" / "jobs"))
 MOCK_APIS = os.getenv("MOCK_APIS", "true").lower() == "true"
 
 
@@ -22,18 +25,18 @@ def render_job(job: dict) -> str:
     job_dir = f"{JOBS_DIR}/{job['job_id']}"
     output_path = f"{job_dir}/output.mp4"
 
-    if MOCK_APIS:
-        with open(output_path, "wb") as f:
-            f.write(b"MOCK_OUTPUT_MP4")
-        print(f"[MOCK] Rendered ({renderer}) → {output_path}")
-        return output_path
+    if not MOCK_APIS:
+        if renderer == "remotion":
+            return _render_remotion(job, output_path)
+        elif renderer == "ffmpeg":
+            return _render_ffmpeg(job, output_path)
+        else:
+            raise ValueError(f"Unknown renderer: {renderer}")
 
-    if renderer == "remotion":
-        return _render_remotion(job, output_path)
-    elif renderer == "ffmpeg":
-        return _render_ffmpeg(job, output_path)
-    else:
-        raise ValueError(f"Unknown renderer: {renderer}")
+    with open(output_path, "wb") as f:
+        f.write(b"MOCK_OUTPUT_MP4")
+    print(f"[MOCK] Rendered ({renderer}) → {output_path}")
+    return output_path
 
 
 def _render_remotion(job: dict, output_path: str) -> str:

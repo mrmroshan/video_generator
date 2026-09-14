@@ -86,13 +86,14 @@ def _generate_with_claude(topic: str, platform: str) -> dict:
     out_file = prompt_file + ".out.json"
 
     try:
-        # Run via cmd.exe shell so .cmd extension resolves and output is properly piped
+        # Redirect only stdout; capture stderr separately for diagnostics
         bat = (
             f'type "{prompt_file}" | '
-            f'"{claude_cmd}" -p --max-turns 1 --output-format json > "{out_file}" 2>&1'
+            f'"{claude_cmd}" -p --max-turns 1 --output-format json > "{out_file}"'
         )
         r = subprocess.run(bat, shell=True, timeout=90,
-                           cwd=os.path.expanduser("~"))
+                           cwd=os.path.expanduser("~"),
+                           capture_output=True)
 
         if not os.path.exists(out_file) or os.path.getsize(out_file) == 0:
             raise RuntimeError("claude produced no output")
@@ -184,6 +185,20 @@ def _mock_blueprint(topic: str, platform: str) -> dict:
             "voiceover_text": f"The truth about {topic} will surprise you.",
             "target_duration_seconds": 5,
             "broll_prompt": f"{topic} technology futuristic concept 4k cinematic",
+            "platform": platform,
+        },
+        {
+            "scene_id": "scene_04",
+            "voiceover_text": "Most experts won't tell you this part.",
+            "target_duration_seconds": 5,
+            "broll_prompt": "expert in suit speaking conference podium professional lighting",
+            "platform": platform,
+        },
+        {
+            "scene_id": "scene_05",
+            "voiceover_text": f"Start using {topic} today. Your future self will thank you.",
+            "target_duration_seconds": 4,
+            "broll_prompt": f"person smiling sunrise new beginning motivated cinematic",
             "platform": platform,
         },
     ]

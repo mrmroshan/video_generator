@@ -28,11 +28,19 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
+from contextlib import asynccontextmanager
 
 from data.db import init_db, list_jobs, load_job, save_job, update_status
 from assets.stock import _search_pexels, _download_video
 
-app = FastAPI(title="Video Maker Dashboard API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
+
+app = FastAPI(title="Video Maker Dashboard API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -40,12 +48,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Initialise DB on startup
-@app.on_event("startup")
-def startup():
-    init_db()
-
 
 # ── Jobs ──────────────────────────────────────────────────────────────
 

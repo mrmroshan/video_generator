@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 
 const PIXELS_PER_SECOND = 80  // 1s = 80px on timeline
 
-export default function Timeline({ job, activeSceneId, onSelectScene, onReorder, locked }) {
+export default function Timeline({ job, activeSceneId, onSelectScene, onReorder, onJobUpdate, locked }) {
   const scenes = job?.scenes || []
   const totalDuration = scenes.reduce((s, sc) => s + (sc.target_duration_seconds || 0), 0)
   const totalWidth = Math.max(totalDuration * PIXELS_PER_SECOND, 600)
@@ -53,11 +53,18 @@ export default function Timeline({ job, activeSceneId, onSelectScene, onReorder,
   const commitDur = async (scene) => {
     const val = parseFloat(durValue)
     if (!isNaN(val) && val >= 1 && val <= 60) {
-      await fetch(`/api/jobs/${job.job_id}/scenes/${scene.scene_id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target_duration_seconds: val }),
-      }).then(r => r.ok && r.json()).then(updated => updated && onReorder(null, updated))
+      try {
+        const r = await fetch(`/api/jobs/${job.job_id}/scenes/${scene.scene_id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target_duration_seconds: val }),
+        })
+        if (!r.ok) throw new Error(await r.text())
+        const updated = await r.json()
+        if (onJobUpdate) onJobUpdate(updated)
+      } catch (e) {
+        alert('Duration save failed: ' + e.message)
+      }
     }
     setEditingDur(null)
   }

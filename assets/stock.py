@@ -7,15 +7,12 @@ import urllib.request
 import urllib.parse
 import urllib.error
 
+from pathlib import Path
+
+_ROOT = Path(__file__).parent.parent
 MOCK_APIS = os.getenv("MOCK_APIS", "true").lower() == "true"
 PEXELS_API_KEY = os.getenv("PEXELS_API_KEY", "")
-JOBS_DIR = os.getenv("JOBS_DIR", "./data/jobs")
-
-PEXELS_HEADERS = {
-    "Authorization": PEXELS_API_KEY or os.getenv("PEXELS_API_KEY", ""),
-    "User-Agent": "VideoMaker/1.0 (personal automation tool)",
-    "Accept": "application/json",
-}
+JOBS_DIR = os.getenv("JOBS_DIR", str(_ROOT / "data" / "jobs"))
 
 
 def fetch_broll_for_job(job: dict) -> dict:
@@ -95,12 +92,13 @@ def _search_pexels(query: str, api_key: str = None) -> dict | None:
     video = videos[0]
     files = video.get("video_files", [])
 
-    # Prefer HD (1280x720), then FHD, then whatever we get
+    # Prefer FHD (1920×1080), then HD (1280×720), then SD
     def quality_rank(f):
         q = f.get("quality", "")
-        if q == "hd": return 0
-        if q == "sd": return 1
-        return 2
+        if q == "fhd": return 0
+        if q == "hd":  return 1
+        if q == "sd":  return 2
+        return 3
 
     files_sorted = sorted(files, key=quality_rank)
     chosen = files_sorted[0] if files_sorted else None

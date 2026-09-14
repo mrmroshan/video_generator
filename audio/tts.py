@@ -9,8 +9,11 @@ import json
 import urllib.request
 import urllib.error
 
+from pathlib import Path
+
+_ROOT = Path(__file__).parent.parent
 MOCK_APIS = os.getenv("MOCK_APIS", "true").lower() == "true"
-JOBS_DIR = os.getenv("JOBS_DIR", "./data/jobs")
+JOBS_DIR = os.getenv("JOBS_DIR", str(_ROOT / "data" / "jobs"))
 
 # ElevenLabs built-in voices (always available, no voices_read permission needed)
 VOICES = {

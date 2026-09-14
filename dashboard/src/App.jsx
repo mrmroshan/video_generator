@@ -30,9 +30,14 @@ export default function App() {
   }, [])
 
   const handleSelectJob = async (jobId) => {
-    const res = await fetch(`/api/jobs/${jobId}`)
-    const job = await res.json()
-    setSelectedJob(job)
+    try {
+      const res = await fetch(`/api/jobs/${jobId}`)
+      if (!res.ok) throw new Error(`API error: ${res.status}`)
+      setSelectedJob(await res.json())
+      setError(null)
+    } catch (e) {
+      setError(e.message)
+    }
   }
 
   const handleBack = () => {

@@ -6,8 +6,10 @@ import os
 import sqlite3
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 
-DB_PATH = os.getenv("DB_PATH", "./data/video_maker.db")
+_HERE = Path(__file__).parent
+DB_PATH = os.getenv("DB_PATH", str(_HERE / "video_maker.db"))
 
 
 def get_connection():
