@@ -318,7 +318,87 @@ def set_caption_style(job_id: str, payload: CaptionStylePayload):
     return job
 
 
-# ── Render ────────────────────────────────────────────────────────────
+@app.get("/platforms")
+def get_platforms():
+    from renderer.render import PLATFORMS
+    return {
+        "platforms": {k: {"width": v[0], "height": v[1], "label": v[2], "description": v[3]}
+                      for k, v in PLATFORMS.items()},
+        "aliases": {
+            "instagram": ["ig","ig_square","fb_post"],
+            "tiktok":    ["reels","shorts","fb_reels"],
+            "facebook":  ["fb","fb_video"],
+        }
+    }
+
+
+@app.post("/jobs/{job_id}/export/{platform}")
+def export_single_platform(job_id: str, platform: str):
+    """Export the master to a specific platform size. Render must exist."""
+    from renderer.render import export_platform, _canonical_platform, PLATFORMS
+    canon = _canonical_platform(platform)
+    if canon not in PLATFORMS:
+        raise HTTPException(422, f"Unknown platform '{platform}'")
+    job = load_job(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    try:
+        path = export_platform(job, canon)
+        exports = job.get("exports", {})
+        exports[canon] = path
+        job["exports"] = exports
+        save_job(job)
+        return {"platform": canon, "path": path,
+                "size_kb": os.path.getsize(path) // 1024}
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"Export failed: {e}")
+
+
+@app.post("/jobs/{job_id}/export-all")
+def export_all(job_id: str):
+    """Export master to all 4 platform sizes in one call."""
+    from renderer.render import export_all_platforms
+    job = load_job(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    try:
+        results = export_all_platforms(job)
+        exports = job.get("exports", {})
+        for platform, path in results.items():
+            if path:
+                exports[platform] = path
+        job["exports"] = exports
+        save_job(job)
+        return {
+            "exports": {
+                p: {"path": path, "size_kb": os.path.getsize(path) // 1024 if path else None}
+                for p, path in results.items()
+            }
+        }
+    except Exception as e:
+        raise HTTPException(500, f"Export failed: {e}")
+
+
+@app.get("/jobs/{job_id}/export/{platform}")
+def download_export(job_id: str, platform: str):
+    """Download a platform-specific export."""
+    from renderer.render import _canonical_platform, PLATFORMS
+    canon = _canonical_platform(platform)
+    job = load_job(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    path = job.get("exports", {}).get(canon)
+    if not path or not os.path.exists(path):
+        raise HTTPException(404, f"No export for '{canon}' — run /export/{canon} first")
+    label = PLATFORMS.get(canon, ("","","",""))[2].replace(" ", "_")
+    filename = f"{job.get('title','video')[:30].replace(' ','_')}_{label}.mp4"
+    return FileResponse(path, media_type="video/mp4",
+                        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+# ── Approve ────────────────────────────────────────────────────────────
 
 @app.post("/jobs/{job_id}/render")
 def render_job_endpoint(job_id: str):
