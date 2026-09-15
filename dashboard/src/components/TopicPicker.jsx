@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 
-export default function TopicPicker({ niche, nicheInfo, platform, onSelect, onBack, createLoading = false, wizardError = null }) {
+export default function TopicPicker({ niche, nicheInfo, platforms = ['tiktok'], onSelect, onBack, createLoading = false, wizardError = null }) {
   const [topics, setTopics]       = useState([])
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState(null)
@@ -24,7 +24,7 @@ export default function TopicPicker({ niche, nicheInfo, platform, onSelect, onBa
       const res = await fetch('/api/topics', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ niche, platform }),
+        body: JSON.stringify({ niche, platform: platforms[0] }),
       })
       if (!res.ok) throw new Error(await res.text())
       const data = await res.json()
@@ -36,13 +36,13 @@ export default function TopicPicker({ niche, nicheInfo, platform, onSelect, onBa
     }
   }
 
-  useEffect(() => { loadTopics() }, [niche, platform])
+  useEffect(() => { loadTopics() }, [niche, platforms[0]])
 
   const handleGenerate = () => {
     if (!selected) return
     onSelect({
       niche,
-      platform,
+      platforms,
       topic_title:   selected.title,
       topic_hook:    selected.hook,
       caption_style: captionStyle,
@@ -56,7 +56,7 @@ export default function TopicPicker({ niche, nicheInfo, platform, onSelect, onBa
         <div className="wizard-niche-badge" style={{ background: nicheInfo?.color + '22', borderColor: nicheInfo?.color }}>
           <span>{nicheInfo?.icon}</span>
           <span>{nicheInfo?.label}</span>
-          <span className="wizard-platform-tag">{platform}</span>
+          <span className="wizard-platform-tag">{platforms.join(' · ')}</span>
         </div>
         <h2 className="wizard-title">Pick a Topic</h2>
         <p className="wizard-subtitle">

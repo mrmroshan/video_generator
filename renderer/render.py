@@ -277,9 +277,9 @@ def _render_ffmpeg(job: dict, caption_style: str = None) -> str:
     os.makedirs(job_dir, exist_ok=True)
     output  = os.path.join(job_dir, "output.mp4")
 
-    # Always render master at 1280×720 regardless of platform
-    # Platform-specific exports happen via export_platform()
-    width, height = 1280, 720
+    # Master always renders at 720×1280 (9:16 vertical — Shorts/Reels format)
+    # Platform-specific exports happen via export_platform() — most get the same file
+    width, height = 720, 1280
     use_karaoke = style.startswith("karaoke")
 
     scene_files = []

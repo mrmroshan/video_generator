@@ -9,7 +9,7 @@ const PHASES = [
   { key: 'ready_for_review',     icon: '✅', label: 'Ready for review',           desc: 'All done — opening dashboard' },
 ]
 
-export default function GeneratingScreen({ jobId, topic, niche, nicheInfo, platform, onReady, onFailed, onCancel }) {
+export default function GeneratingScreen({ jobId, topic, niche, nicheInfo, platforms = [], onReady, onFailed, onCancel }) {
   const [progress, setProgress]   = useState(null)
   const [elapsed, setElapsed]     = useState(0)
   const pollRef                   = useRef(null)
@@ -76,7 +76,7 @@ export default function GeneratingScreen({ jobId, topic, niche, nicheInfo, platf
         <div className="wizard-niche-badge" style={{ background: nicheInfo?.color + '22', borderColor: nicheInfo?.color }}>
           <span>{nicheInfo?.icon}</span>
           <span>{nicheInfo?.label}</span>
-          <span className="wizard-platform-tag">{platform}</span>
+          <span className="wizard-platform-tag">{platforms.join(' · ') || 'shorts'}</span>
         </div>
         <h2 className="wizard-title">Generating Your Video</h2>
         <p className="wizard-topic-preview">"{topic}"</p>

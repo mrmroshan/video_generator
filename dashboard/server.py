@@ -28,6 +28,7 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
+from typing import List
 from contextlib import asynccontextmanager
 
 from data.db import init_db, list_jobs, load_job, save_job, update_status, update_progress
@@ -89,8 +90,13 @@ class CreateJobPayload(BaseModel):
     niche:          str
     topic_title:    str
     topic_hook:     str = ""
-    platform:       str = "youtube"
+    platforms:      List[str] = ["tiktok", "instagram", "youtube", "facebook"]
     caption_style:  str = "karaoke"
+
+    @property
+    def platform(self) -> str:
+        """Primary platform — first in list, used for script style."""
+        return self.platforms[0] if self.platforms else "tiktok"
 
 
 @app.post("/jobs/create")
@@ -104,18 +110,23 @@ def create_job(payload: CreateJobPayload, background_tasks: BackgroundTasks):
         raise HTTPException(422, f"Unknown niche '{payload.niche}'")
     if not payload.topic_title.strip():
         raise HTTPException(422, "topic_title cannot be empty")
-    platform = payload.platform.lower().strip()
-    if platform not in VALID_PLATFORMS:
-        raise HTTPException(422, f"Unknown platform '{payload.platform}'. Choose from: {sorted(VALID_PLATFORMS)}")
+    # Validate all selected platforms
+    bad = [p for p in payload.platforms if p.lower() not in VALID_PLATFORMS]
+    if bad:
+        raise HTTPException(422, f"Unknown platform(s): {bad}. Choose from: {sorted(VALID_PLATFORMS)}")
+    if not payload.platforms:
+        raise HTTPException(422, "At least one platform must be selected")
 
     # Pre-create the job record so the UI can poll immediately
     import uuid
     from datetime import datetime, timezone
     job_id = str(uuid.uuid4())
+    platforms = [p.lower() for p in payload.platforms]
     job = {
         "job_id":         job_id,
         "status":         "pending",
-        "platform":       payload.platform,
+        "platform":       platforms[0],    # primary (for script style)
+        "platforms":      platforms,        # all selected (for exports)
         "niche":          payload.niche,
         "topic":          payload.topic_title,
         "topic_hook":     payload.topic_hook,
@@ -168,17 +179,22 @@ def _run_wizard_pipeline(job_id: str, payload: "CreateJobPayload"):
     from audio.timestamps import extract_timestamps
     from assets.stock import fetch_broll_for_job
 
+    platforms = [p.lower() for p in (payload.platforms or ["tiktok"])]
+    primary   = platforms[0]
+
     try:
-        # Phase 1 — Script
+        # Phase 1 — Script (always Shorts/9:16, primary platform drives rules)
         update_progress(job_id, "generating_script", "Claude is writing your script...")
         topic = payload.topic_title
-        job   = generate_script(topic, payload.platform)
+        job   = generate_script(topic, primary)
         # Preserve wizard metadata + carry forward progress fields
         job["job_id"]           = job_id
         job["niche"]            = payload.niche
         job["topic"]            = topic
         job["topic_hook"]       = payload.topic_hook
         job["caption_style"]    = payload.caption_style
+        job["platform"]         = primary
+        job["platforms"]        = platforms   # full list for auto-export
         job["status"]           = "pending"
         job["progress_phase"]   = "generating_script"
         job["progress_detail"]  = "Script complete — generating audio..."
@@ -751,7 +767,24 @@ def render_job_endpoint(job_id: str, background_tasks: BackgroundTasks):
     def _do_render(job_id: str, job_snapshot: dict):
         try:
             output_path = render_job(job_snapshot)
-            update_status(job_id, "done", {"output_path": output_path})
+            # Auto-export all selected platforms after render
+            # All are 720×1280 Shorts format — export_platform handles any crops
+            platforms = job_snapshot.get("platforms", [job_snapshot.get("platform", "tiktok")])
+            exports = {}
+            try:
+                from renderer.render import export_platform
+                fresh_job = load_job(job_id) or job_snapshot
+                fresh_job["output_path"] = output_path
+                for p in platforms:
+                    try:
+                        exp_path = export_platform(fresh_job, p)
+                        exports[p] = exp_path
+                        print(f"  [EXPORT] {p} → {exp_path}")
+                    except Exception as ex:
+                        print(f"  [WARN] Export failed for {p}: {ex}")
+            except Exception as ex:
+                print(f"  [WARN] Auto-export failed: {ex}")
+            update_status(job_id, "done", {"output_path": output_path, "exports": exports})
         except Exception as e:
             print(f"[ERROR] Render failed for {job_id}: {e}")
             try:

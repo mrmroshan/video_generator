@@ -17,13 +17,13 @@ export default function App() {
   const [step, setStep]               = useState(STEP.LIST)
 
   // Wizard state
-  const [niches, setNiches]           = useState({})
-  const [nicheError, setNicheError]   = useState(null)
-  const [wizardNiche, setWizardNiche] = useState(null)
-  // Persist platform across wizard sessions so TikTok creators don't re-toggle every time
-  const [wizardPlatform, setPlatform] = useState('youtube')
-  const [generatingJob, setGenJob]    = useState(null)  // {jobId, topic, niche, platform}
-  const [wizardError, setWizardError] = useState(null)
+  const [niches, setNiches]             = useState({})
+  const [nicheError, setNicheError]     = useState(null)
+  const [wizardNiche, setWizardNiche]   = useState(null)
+  // Persist platform selection across wizard sessions
+  const [wizardPlatforms, setWizardPlatforms] = useState(['tiktok','instagram','youtube','facebook'])
+  const [generatingJob, setGenJob]      = useState(null)
+  const [wizardError, setWizardError]   = useState(null)
   const [createLoading, setCreateLoading] = useState(false)
 
   // ── Data fetching ────────────────────────────────────────────────────
@@ -78,9 +78,9 @@ export default function App() {
     setStep(STEP.NICHE)
   }
 
-  const handleNicheSelect = (nicheKey, platform) => {
+  const handleNicheSelect = (nicheKey, platforms) => {
     setWizardNiche(nicheKey)
-    setPlatform(platform)
+    setWizardPlatforms(platforms)
     setStep(STEP.TOPIC)
   }
 
@@ -96,10 +96,10 @@ export default function App() {
       if (!res.ok) throw new Error(await res.text())
       const { job_id } = await res.json()
       setGenJob({
-        jobId:    job_id,
-        topic:    params.topic_title,
-        niche:    params.niche,
-        platform: params.platform,
+        jobId:     job_id,
+        topic:     params.topic_title,
+        niche:     params.niche,
+        platforms: params.platforms,
       })
       setStep(STEP.GENERATING)
     } catch (e) {
@@ -166,7 +166,7 @@ export default function App() {
         {step === STEP.NICHE && (
           <NicheWizard
             niches={niches}
-            defaultPlatform={wizardPlatform}
+            defaultPlatforms={wizardPlatforms}
             onSelect={handleNicheSelect}
             onBack={handleBack}
           />
@@ -176,7 +176,7 @@ export default function App() {
           <TopicPicker
             niche={wizardNiche}
             nicheInfo={niches[wizardNiche]}
-            platform={wizardPlatform}
+            platforms={wizardPlatforms}
             createLoading={createLoading}
             wizardError={wizardError}
             onSelect={handleTopicSelect}
@@ -190,7 +190,7 @@ export default function App() {
             topic={generatingJob.topic}
             niche={generatingJob.niche}
             nicheInfo={niches[generatingJob.niche]}
-            platform={generatingJob.platform}
+            platforms={generatingJob.platforms}
             onReady={handleGeneratingReady}
             onFailed={handleGeneratingFailed}
             onCancel={handleGeneratingCancel}

@@ -85,6 +85,7 @@ def test_wizard_pipeline_script_failure_marks_job_failed(tmp_db, mock_job):
     class FakePayload:
         topic_title   = "test"
         platform      = "youtube"
+        platforms     = ["youtube"]
         niche         = "finance"
         caption_style = "karaoke"
         topic_hook    = ""
@@ -111,6 +112,7 @@ def test_wizard_pipeline_partial_timestamps_reaches_review(tmp_db, mock_job):
     class FakePayload:
         topic_title   = "test"
         platform      = "youtube"
+        platforms     = ["youtube"]
         niche         = "finance"
         caption_style = "karaoke"
         topic_hook    = ""

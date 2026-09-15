@@ -102,7 +102,7 @@ Output this exact JSON structure:
   ]
 }}"""
 
-SCRIPT_PROMPT = """You are a video script writer for {platform} videos.
+SCRIPT_PROMPT = """You are a video script writer for short-form vertical video (Shorts/Reels).
 
 Generate a video script for the topic: \"{topic}\"
 
@@ -110,8 +110,12 @@ Rules:
 - Output ONLY valid JSON — no markdown, no explanation, no code fences
 - {platform_rules}
 - Every scene MUST have a specific, descriptive broll_prompt (10+ words)
-- Keep voiceover_text punchy and conversational
-- Generate exactly 5 scenes
+- Keep voiceover_text punchy, conversational, and hook-driven
+- Generate exactly 7 scenes
+- Scene 1 must open with a strong hook (question, bold claim, or shocking fact) — 8-12s
+- Scenes 2-6 deliver the value — 10-14s each
+- Scene 7 closes with a call to action — 8-12s
+- Total voiceover should read at speaking pace to ~70-90 seconds
 
 Output this exact JSON structure:
 {{
@@ -122,18 +126,21 @@ Output this exact JSON structure:
     {{
       "scene_id": "scene_01",
       "voiceover_text": "...",
-      "target_duration_seconds": 5,
+      "target_duration_seconds": 10,
       "broll_prompt": "...",
-      "platform": "{platform}"
+      "platform": "shorts"
     }}
   ]
 }}"""
 
 PLATFORM_RULES = {
-    "tiktok":    "TikTok style — fast hook in scene_01 (≤4s), punchy lines, each scene ≤6s, total ≤30s",
-    "youtube":   "YouTube style — engaging narrative, build curiosity, each scene 5-10s, total 45-90s",
-    "instagram": "Instagram Reels/Feed style — strong visual hook, concise scenes 5-8s, total 30-60s, square-friendly framing",
-    "facebook":  "Facebook video style — engaging hook, accessible language, scenes 6-10s, total 45-90s, auto-play-friendly",
+    # All platforms now use Shorts format (9:16 vertical, 60-90s)
+    # platform field stored on job for distribution metadata only
+    "tiktok":    "Shorts style — punchy hook scene_01 (8-12s), value delivery scenes 2-6 (10-14s each), CTA scene 7 (8-12s), total 70-90s, 9:16 vertical framing",
+    "youtube":   "Shorts style — punchy hook scene_01 (8-12s), value delivery scenes 2-6 (10-14s each), CTA scene 7 (8-12s), total 70-90s, 9:16 vertical framing",
+    "instagram": "Reels style — punchy hook scene_01 (8-12s), value delivery scenes 2-6 (10-14s each), CTA scene 7 (8-12s), total 70-90s, 9:16 vertical framing",
+    "facebook":  "Reels style — punchy hook scene_01 (8-12s), value delivery scenes 2-6 (10-14s each), CTA scene 7 (8-12s), total 70-90s, 9:16 vertical framing",
+    "shorts":    "Shorts style — punchy hook scene_01 (8-12s), value delivery scenes 2-6 (10-14s each), CTA scene 7 (8-12s), total 70-90s, 9:16 vertical framing",
 }
 
 
@@ -448,19 +455,20 @@ def _assemble_job(script: dict, topic: str, platform: str) -> dict:
     renderer = "ffmpeg"
 
     return {
-        "job_id": job_id,
-        "status": "pending",
-        "platform": platform,
-        "title": script.get("title", f"The Truth About {topic.title()}"),
+        "job_id":      job_id,
+        "status":      "pending",
+        "platform":    platform,
+        "platforms":   [platform],   # list — expanded by wizard to multi-select
+        "title":       script.get("title", f"The Truth About {topic.title()}"),
         "description": script.get("description", ""),
-        "hashtags": script.get("hashtags", [f"#{topic.replace(' ', '')}"]),
-        "scenes": scenes,
-        "renderer": renderer,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "hashtags":    script.get("hashtags", [f"#{topic.replace(' ', '')}"]),
+        "scenes":      scenes,
+        "renderer":    renderer,
+        "created_at":  datetime.now(timezone.utc).isoformat(),
         "approved_at": None,
         "output_path": None,
         "generated_by": "claude-max",
-        "topic": topic,
+        "topic":       topic,
     }
 
 
@@ -469,54 +477,69 @@ def _mock_blueprint(topic: str, platform: str) -> dict:
     scenes = [
         {
             "scene_id": "scene_01",
-            "voiceover_text": f"Did you know that {topic} is changing everything?",
-            "target_duration_seconds": 4,
-            "broll_prompt": f"{topic} aerial wide shot cinematic golden hour",
-            "platform": platform,
+            "voiceover_text": f"Nobody talks about what {topic} is actually doing to your life. Here's the truth most people miss.",
+            "target_duration_seconds": 10,
+            "broll_prompt": f"{topic} close-up dramatic cinematic reveal slow motion golden hour lighting",
+            "platform": "shorts",
         },
         {
             "scene_id": "scene_02",
-            "voiceover_text": "Here's what most people get wrong about it.",
-            "target_duration_seconds": 5,
-            "broll_prompt": "person looking confused at laptop screen close up office",
-            "platform": platform,
+            "voiceover_text": f"First thing to understand about {topic} — it's not what you think. Most people approach it completely wrong.",
+            "target_duration_seconds": 12,
+            "broll_prompt": "person looking confused at laptop screen, shallow depth of field, moody office lighting",
+            "platform": "shorts",
         },
         {
             "scene_id": "scene_03",
-            "voiceover_text": f"The truth about {topic} will surprise you.",
-            "target_duration_seconds": 5,
-            "broll_prompt": f"{topic} technology futuristic concept 4k cinematic",
-            "platform": platform,
+            "voiceover_text": "Here's what the research actually shows. And the numbers are going to surprise you.",
+            "target_duration_seconds": 12,
+            "broll_prompt": "researcher pointing at data on whiteboard, focused expression, clean lab environment bright lighting",
+            "platform": "shorts",
         },
         {
             "scene_id": "scene_04",
-            "voiceover_text": "Most experts won't tell you this part.",
-            "target_duration_seconds": 5,
-            "broll_prompt": "expert in suit speaking conference podium professional lighting",
-            "platform": platform,
+            "voiceover_text": f"The people who get {topic} right share one thing in common. They stopped doing what everyone else does.",
+            "target_duration_seconds": 12,
+            "broll_prompt": "successful person walking confidently through modern city at sunrise, tracking shot, cinematic",
+            "platform": "shorts",
         },
         {
             "scene_id": "scene_05",
-            "voiceover_text": f"Start using {topic} today. Your future self will thank you.",
-            "target_duration_seconds": 4,
-            "broll_prompt": f"person smiling sunrise new beginning motivated cinematic",
-            "platform": platform,
+            "voiceover_text": "Most experts won't tell you this part — because it's inconvenient. But it's the most important thing.",
+            "target_duration_seconds": 12,
+            "broll_prompt": "expert speaking directly to camera in front of bookshelf, warm lighting, confident expression",
+            "platform": "shorts",
+        },
+        {
+            "scene_id": "scene_06",
+            "voiceover_text": f"Once you understand this about {topic}, you can't unsee it. It changes every decision you make.",
+            "target_duration_seconds": 12,
+            "broll_prompt": "person having lightbulb moment at desk, looking up from laptop with surprised expression, natural light",
+            "platform": "shorts",
+        },
+        {
+            "scene_id": "scene_07",
+            "voiceover_text": f"Start applying this to {topic} today. Share this with someone who needs to hear it. Follow for more.",
+            "target_duration_seconds": 10,
+            "broll_prompt": "person smiling confidently at sunrise, motivated energy, cinematic dolly forward shot, hopeful",
+            "platform": "shorts",
         },
     ]
     return {
-        "job_id": job_id,
-        "status": "pending",
-        "platform": platform,
-        "title": f"The Truth About {topic.title()}",
-        "description": f"Everything you need to know about {topic} in under 60 seconds.",
-        "hashtags": [f"#{topic.replace(' ', '')}", "#shorts", "#fyp"],
-        "scenes": scenes,
-        "renderer": "ffmpeg",
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "job_id":      job_id,
+        "status":      "pending",
+        "platform":    platform,
+        "platforms":   [platform],
+        "title":       f"The Truth About {topic.title()}",
+        "description": f"What most people get wrong about {topic} — and how to fix it.",
+        "hashtags":    [f"#{topic.replace(' ', '')}", "#shorts", "#fyp", "#reels", "#viral"],
+        "scenes":      scenes,
+        "renderer":    "ffmpeg",
+        "created_at":  datetime.now(timezone.utc).isoformat(),
         "approved_at": None,
         "output_path": None,
         "generated_by": "mock",
-        "topic": topic,
+        "topic":       topic,
     }
 
 

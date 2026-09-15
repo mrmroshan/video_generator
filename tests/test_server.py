@@ -155,7 +155,7 @@ def test_topics_returns_8_topics(client):
 def test_create_job_unknown_niche_rejected(client):
     res = client.post("/jobs/create", json={
         "niche": "astrology", "topic_title": "Stars and money",
-        "platform": "youtube"
+        "platforms": ["youtube"]
     })
     assert res.status_code == 422
 
@@ -163,7 +163,7 @@ def test_create_job_unknown_niche_rejected(client):
 def test_create_job_empty_topic_rejected(client):
     res = client.post("/jobs/create", json={
         "niche": "finance", "topic_title": "  ",
-        "platform": "youtube"
+        "platforms": ["youtube"]
     })
     assert res.status_code == 422
 
@@ -172,7 +172,7 @@ def test_create_job_returns_job_id(client):
     res = client.post("/jobs/create", json={
         "niche": "finance",
         "topic_title": "Test topic for wizard",
-        "platform": "youtube"
+        "platforms": ["youtube"]
     })
     assert res.status_code == 200
     data = res.json()
@@ -213,26 +213,45 @@ def test_topics_all_four_platforms_accepted(client):
 def test_create_job_unknown_platform_rejected(client):
     """POST /jobs/create with unknown platform returns 422."""
     res = client.post("/jobs/create", json={
-        "niche": "finance", "topic_title": "test", "platform": "snapchat"
+        "niche": "finance", "topic_title": "test", "platforms": ["snapchat"]
     })
     assert res.status_code == 422
 
 
 def test_create_job_instagram_platform_accepted(client):
-    """POST /jobs/create with platform=instagram returns a job_id."""
+    """POST /jobs/create with platforms=[instagram] returns a job_id."""
     res = client.post("/jobs/create", json={
         "niche": "finance", "topic_title": "Instagram test topic",
-        "platform": "instagram"
+        "platforms": ["instagram"]
     })
     assert res.status_code == 200
     assert "job_id" in res.json()
 
 
 def test_create_job_facebook_platform_accepted(client):
-    """POST /jobs/create with platform=facebook returns a job_id."""
+    """POST /jobs/create with platforms=[facebook] returns a job_id."""
     res = client.post("/jobs/create", json={
         "niche": "marketing", "topic_title": "Facebook test topic",
-        "platform": "facebook"
+        "platforms": ["facebook"]
     })
     assert res.status_code == 200
     assert "job_id" in res.json()
+
+
+def test_create_job_multi_platform_accepted(client):
+    """POST /jobs/create with all 4 platforms returns a job_id."""
+    res = client.post("/jobs/create", json={
+        "niche": "finance", "topic_title": "Multi-platform test",
+        "platforms": ["tiktok", "instagram", "youtube", "facebook"]
+    })
+    assert res.status_code == 200
+    data = res.json()
+    assert "job_id" in data
+
+
+def test_create_job_empty_platforms_rejected(client):
+    """POST /jobs/create with empty platforms list returns 422."""
+    res = client.post("/jobs/create", json={
+        "niche": "finance", "topic_title": "test", "platforms": []
+    })
+    assert res.status_code == 422
