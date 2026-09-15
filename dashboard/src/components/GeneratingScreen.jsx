@@ -9,15 +9,23 @@ const PHASES = [
   { key: 'ready_for_review',     icon: '✅', label: 'Ready for review',           desc: 'All done — opening dashboard' },
 ]
 
-export default function GeneratingScreen({ jobId, topic, niche, nicheInfo, platform, onReady, onFailed }) {
+export default function GeneratingScreen({ jobId, topic, niche, nicheInfo, platform, onReady, onFailed, onCancel }) {
   const [progress, setProgress]   = useState(null)
   const [elapsed, setElapsed]     = useState(0)
   const pollRef                   = useRef(null)
   const timerRef                  = useRef(null)
+  const readyTimeoutRef           = useRef(null)   // store setTimeout ID for cleanup
+  const onReadyRef                = useRef(onReady)
+  const onFailedRef               = useRef(onFailed)
 
-  const currentPhaseIdx = progress
-    ? PHASES.findIndex(p => p.key === progress.progress_phase)
-    : 0
+  // Keep callback refs current so stale closure doesn't capture old props
+  useEffect(() => { onReadyRef.current  = onReady  }, [onReady])
+  useEffect(() => { onFailedRef.current = onFailed }, [onFailed])
+
+  // Clamp to valid index; unknown phase strings fall to 0 (not -1)
+  const currentPhaseIdx = Math.max(0,
+    progress ? PHASES.findIndex(p => p.key === progress.progress_phase) : 0
+  )
 
   useEffect(() => {
     // Elapsed time counter
@@ -37,12 +45,13 @@ export default function GeneratingScreen({ jobId, topic, niche, nicheInfo, platf
           done = true
           clearInterval(pollRef.current)
           clearInterval(timerRef.current)
-          setTimeout(() => onReady(jobId), 800)  // brief pause so user sees ✅
+          // Store timeout ID so it can be cancelled on unmount
+          readyTimeoutRef.current = setTimeout(() => onReadyRef.current(jobId), 800)
         } else if (data.failed) {
           done = true
           clearInterval(pollRef.current)
           clearInterval(timerRef.current)
-          onFailed(data.progress_detail || 'Pipeline failed')
+          onFailedRef.current(data.progress_detail || 'Pipeline failed')
         }
       } catch (_) { }
     }
@@ -51,8 +60,10 @@ export default function GeneratingScreen({ jobId, topic, niche, nicheInfo, platf
     pollRef.current = setInterval(poll, 2000)
 
     return () => {
+      // Cancel all timers on unmount — prevents bounce-back-to-REVIEW
       clearInterval(pollRef.current)
       clearInterval(timerRef.current)
+      clearTimeout(readyTimeoutRef.current)
     }
   }, [jobId])
 
@@ -109,6 +120,15 @@ export default function GeneratingScreen({ jobId, topic, niche, nicheInfo, platf
         <div className="generating-ready">
           <span className="ready-checkmark">✅</span>
           <p>Video ready! Opening review dashboard…</p>
+        </div>
+      )}
+
+      {/* Cancel button — visible until ready */}
+      {!progress?.ready && onCancel && (
+        <div style={{ textAlign: 'center', marginTop: '8px' }}>
+          <button className="btn-wizard-back" onClick={onCancel}>
+            ✕ Cancel &amp; start over
+          </button>
         </div>
       )}
 

@@ -24,7 +24,7 @@ if env_path.exists():
                 k, v = line.split("=", 1)
                 os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
@@ -64,7 +64,7 @@ class TopicsPayload(BaseModel):
 
 
 @app.post("/topics")
-def get_topics(payload: TopicsPayload, background_tasks: BackgroundTasks):
+def get_topics(payload: TopicsPayload):
     """Generate 8 trending topic ideas for a niche. Returns immediately with job_id for polling."""
     from orchestration.crew import NICHES
     if payload.niche not in NICHES:
@@ -116,8 +116,6 @@ def create_job(payload: CreateJobPayload, background_tasks: BackgroundTasks):
         "progress_phase": "queued",
         "progress_detail": "Queued — starting now...",
     }
-    from data.db import init_db
-    init_db()
     save_job(job)
 
     background_tasks.add_task(_run_wizard_pipeline, job_id, payload)
@@ -153,16 +151,8 @@ def _run_wizard_pipeline(job_id: str, payload: "CreateJobPayload"):
     """
     Background task: runs the full pipeline for the wizard flow.
     Updates progress_phase at each step so the UI can show live status.
+    Note: server.py already loads .env at startup — no re-load needed here.
     """
-    import sys, os
-    sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
-    with open(str(__import__("pathlib").Path(__file__).parent.parent / ".env")) as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                k, v = line.split("=", 1)
-                os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
-
     from data.db import update_progress, update_status, load_job, save_job
     from orchestration.crew import generate_script
     from audio.tts import generate_audio_for_job
@@ -174,23 +164,28 @@ def _run_wizard_pipeline(job_id: str, payload: "CreateJobPayload"):
         update_progress(job_id, "generating_script", "Claude is writing your script...")
         topic = payload.topic_title
         job   = generate_script(topic, payload.platform)
-        # Preserve wizard metadata
-        job["job_id"]        = job_id
-        job["niche"]         = payload.niche
-        job["topic"]         = topic
-        job["topic_hook"]    = payload.topic_hook
-        job["caption_style"] = payload.caption_style
-        job["status"]        = "pending"
-        job["progress_phase"] = "generating_script"
+        # Preserve wizard metadata + carry forward progress fields
+        job["job_id"]           = job_id
+        job["niche"]            = payload.niche
+        job["topic"]            = topic
+        job["topic_hook"]       = payload.topic_hook
+        job["caption_style"]    = payload.caption_style
+        job["status"]           = "pending"
+        job["progress_phase"]   = "generating_script"
+        job["progress_detail"]  = "Script complete — generating audio..."
         save_job(job)
 
         # Phase 2 — Audio
         update_progress(job_id, "generating_audio", f"Generating voiceover for {len(job['scenes'])} scenes...")
+        job["progress_phase"]  = "generating_audio"
+        job["progress_detail"] = f"Generating voiceover for {len(job['scenes'])} scenes..."
         job = generate_audio_for_job(job)
         save_job(job)
 
         # Phase 3 — Timestamps
         update_progress(job_id, "extracting_timestamps", "Extracting word-level timestamps with Whisper...")
+        job["progress_phase"]  = "extracting_timestamps"
+        job["progress_detail"] = "Extracting word-level timestamps with Whisper..."
         for scene in job["scenes"]:
             try:
                 extract_timestamps(scene)
@@ -200,12 +195,14 @@ def _run_wizard_pipeline(job_id: str, payload: "CreateJobPayload"):
 
         # Phase 4 — B-roll
         update_progress(job_id, "downloading_broll", "Downloading B-roll clips from Pexels...")
+        job["progress_phase"]  = "downloading_broll"
+        job["progress_detail"] = "Downloading B-roll clips from Pexels..."
         job = fetch_broll_for_job(job)
         save_job(job)
 
         # Done — hand off to review
-        job["status"]         = "in_review"
-        job["progress_phase"] = "ready_for_review"
+        job["status"]          = "in_review"
+        job["progress_phase"]  = "ready_for_review"
         job["progress_detail"] = "Ready! Opening review dashboard..."
         save_job(job)
         print(f"[WIZARD] Job {job_id} ready for review")
@@ -298,7 +295,7 @@ def reorder_scenes(job_id: str, payload: ReorderPayload):
 # ── B-roll search (returns candidates without downloading) ─────────────
 
 @app.get("/jobs/{job_id}/scenes/{scene_id}/search-broll")
-def search_broll(job_id: str, scene_id: str, q: str, limit: int = 6):
+def search_broll(job_id: str, scene_id: str, q: str, limit: int = Query(default=6, ge=1, le=80)):
     if not q or not q.strip():
         raise HTTPException(422, "Search query 'q' cannot be empty")
     job = load_job(job_id)
@@ -364,7 +361,7 @@ def pick_broll(job_id: str, scene_id: str, payload: PickBrollPayload):
     # SSRF guard: only allow Pexels CDN URLs
     parsed = _urlparse.urlparse(payload.download_url)
     allowed_hosts = {"videos.pexels.com", "www.pexels.com", "images.pexels.com"}
-    if parsed.scheme not in ("https", "http") or parsed.hostname not in allowed_hosts:
+    if parsed.scheme != "https" or parsed.hostname not in allowed_hosts:
         raise HTTPException(422, f"download_url must be a Pexels CDN URL (got: {parsed.hostname!r})")
     job = load_job(job_id)
     if not job:
@@ -387,8 +384,9 @@ def pick_broll(job_id: str, scene_id: str, payload: PickBrollPayload):
         "Referer": "https://www.pexels.com/",
     })
     with _req.urlopen(req, timeout=60) as r:
+        import shutil as _shutil
         with open(dest, "wb") as f:
-            f.write(r.read())
+            _shutil.copyfileobj(r, f, length=256 * 1024)
 
     scene["broll_path"] = dest
     scene["broll_meta"] = {
@@ -778,6 +776,12 @@ def approve_job(job_id: str):
         raise HTTPException(404, f"Job not found: {job_id}")
     if job["status"] in ("approved", "done", "rendering"):
         raise HTTPException(409, f"Cannot approve a job with status '{job['status']}'")
+    # Block approval if the wizard pipeline hasn't finished yet
+    progress_phase = job.get("progress_phase", "")
+    if progress_phase not in ("ready_for_review", "") and job["status"] != "in_review":
+        raise HTTPException(409, f"Job is still generating (phase: {progress_phase!r}) — wait until it reaches review")
+    if not job.get("scenes"):
+        raise HTTPException(409, "Job has no scenes yet — pipeline may still be running")
     update_status(job_id, "approved", {"approved_at": datetime.now(timezone.utc).isoformat()})
     return load_job(job_id)
 

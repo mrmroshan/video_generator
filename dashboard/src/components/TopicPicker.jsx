@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 
-export default function TopicPicker({ niche, nicheInfo, platform, onSelect, onBack }) {
+export default function TopicPicker({ niche, nicheInfo, platform, onSelect, onBack, createLoading = false, wizardError = null }) {
   const [topics, setTopics]       = useState([])
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState(null)
@@ -113,13 +113,20 @@ export default function TopicPicker({ niche, nicheInfo, platform, onSelect, onBa
           <div className="wizard-cta">
             <button
               className="btn-wizard-generate"
-              disabled={!selected}
+              disabled={!selected || createLoading}
               onClick={handleGenerate}
             >
-              {selected
+              {createLoading ? '⏳ Starting pipeline…' :
+               selected
                 ? `🚀 Generate Video — "${selected.title.slice(0, 40)}${selected.title.length > 40 ? '…' : ''}"`
                 : '← Select a topic above'}
             </button>
+            {/* Inline error — shown near CTA so user sees it even when scrolled down */}
+            {wizardError && (
+              <div className="ce-error" style={{ marginTop: '8px', textAlign: 'center' }}>
+                ❌ {wizardError}
+              </div>
+            )}
           </div>
         </>
       )}

@@ -18,10 +18,13 @@ export default function App() {
 
   // Wizard state
   const [niches, setNiches]           = useState({})
+  const [nicheError, setNicheError]   = useState(null)
   const [wizardNiche, setWizardNiche] = useState(null)
+  // Persist platform across wizard sessions so TikTok creators don't re-toggle every time
   const [wizardPlatform, setPlatform] = useState('youtube')
   const [generatingJob, setGenJob]    = useState(null)  // {jobId, topic, niche, platform}
   const [wizardError, setWizardError] = useState(null)
+  const [createLoading, setCreateLoading] = useState(false)
 
   // ── Data fetching ────────────────────────────────────────────────────
   const fetchJobs = async () => {
@@ -37,8 +40,12 @@ export default function App() {
   const fetchNiches = async () => {
     try {
       const res = await fetch('/api/niches')
-      if (res.ok) setNiches((await res.json()).niches || {})
-    } catch (_) {}
+      if (!res.ok) throw new Error(`API ${res.status}`)
+      setNiches((await res.json()).niches || {})
+      setNicheError(null)
+    } catch (e) {
+      setNicheError('Could not load niches: ' + e.message)
+    }
   }
 
   useEffect(() => {
@@ -79,6 +86,7 @@ export default function App() {
 
   const handleTopicSelect = async (params) => {
     setWizardError(null)
+    setCreateLoading(true)
     try {
       const res = await fetch('/api/jobs/create', {
         method: 'POST',
@@ -96,6 +104,8 @@ export default function App() {
       setStep(STEP.GENERATING)
     } catch (e) {
       setWizardError('Failed to start pipeline: ' + e.message)
+    } finally {
+      setCreateLoading(false)
     }
   }
 
@@ -105,11 +115,21 @@ export default function App() {
   }
 
   const handleGeneratingFailed = (detail) => {
+    setGenJob(null)
     setWizardError(`Pipeline failed: ${detail}`)
     setStep(STEP.NICHE)
   }
 
+  const handleGeneratingCancel = () => {
+    // Navigate away — background job continues but user can start over
+    setGenJob(null)
+    setWizardError(null)
+    setStep(STEP.NICHE)
+  }
+
   // ── Render ───────────────────────────────────────────────────────────
+  const isWizardActive = [STEP.NICHE, STEP.TOPIC, STEP.GENERATING].includes(step)
+
   return (
     <div className="app">
       <header className="app-header">
@@ -120,6 +140,12 @@ export default function App() {
         {step === STEP.LIST && (
           <button className="btn-new-video" onClick={handleNewVideo}>
             + New Video
+          </button>
+        )}
+        {isWizardActive && (
+          <button className="btn-new-video" style={{ background: 'none', border: '1px solid #333', color: '#888' }}
+            onClick={handleBack}>
+            ✕ Cancel
           </button>
         )}
       </header>
@@ -140,7 +166,9 @@ export default function App() {
         {step === STEP.NICHE && (
           <NicheWizard
             niches={niches}
+            defaultPlatform={wizardPlatform}
             onSelect={handleNicheSelect}
+            onBack={handleBack}
           />
         )}
 
@@ -149,6 +177,8 @@ export default function App() {
             niche={wizardNiche}
             nicheInfo={niches[wizardNiche]}
             platform={wizardPlatform}
+            createLoading={createLoading}
+            wizardError={wizardError}
             onSelect={handleTopicSelect}
             onBack={() => setStep(STEP.NICHE)}
           />
@@ -163,6 +193,7 @@ export default function App() {
             platform={generatingJob.platform}
             onReady={handleGeneratingReady}
             onFailed={handleGeneratingFailed}
+            onCancel={handleGeneratingCancel}
           />
         )}
 

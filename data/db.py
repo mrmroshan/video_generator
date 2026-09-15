@@ -96,6 +96,7 @@ def update_progress(job_id: str, phase: str, detail: str = ""):
         phase = "queued"
     job = load_job(job_id)
     if not job:
+        print(f"  [WARN] update_progress: job {job_id} not found — skipping")
         return
     job["progress_phase"]      = phase
     job["progress_detail"]     = detail

@@ -206,8 +206,71 @@ def _mock_topics(niche: str, platform: str) -> dict:
             {"id": "t8", "title": "What successful people do differently on Sundays", "hook": "Sunday isn't a rest day. It's a prep day.", "why_trending": "Routine-reveal content has highest repeat viewership"},
         ],
     }
-    # Default to finance if niche not in mock
-    topics = MOCK.get(niche, MOCK["finance"])
+    # Add generic fallback topics for niches not yet in MOCK
+    GENERIC = {
+        "health":         [
+            {"id": "t1", "title": "The morning habit that adds 10 years to your life", "hook": "One habit. Backed by science. Takes 5 minutes.", "why_trending": "Longevity content is top-performing across all age groups"},
+            {"id": "t2", "title": "Why most diets fail by week 3 (and what actually works)", "hook": "It's not willpower. It's biology. Here's the fix.", "why_trending": "Diet myth-busting drives high save rates"},
+            {"id": "t3", "title": "The gut health secret no doctor tells you", "hook": "Your gut runs your brain. Most people ignore it.", "why_trending": "Gut microbiome content is surging across platforms"},
+            {"id": "t4", "title": "5 signs your body is inflamed right now", "hook": "Inflammation is silent. These symptoms scream it.", "why_trending": "Symptom-awareness content drives fear-based engagement"},
+            {"id": "t5", "title": "The sleep habit that doubles your energy", "hook": "It's not how long you sleep. It's when.", "why_trending": "Sleep optimization is consistently top-searched"},
+            {"id": "t6", "title": "Why walking is the most underrated exercise", "hook": "No gym. No equipment. Just 30 minutes.", "why_trending": "Low-barrier fitness content gets the highest saves"},
+            {"id": "t7", "title": "The mental health habit athletes swear by", "hook": "Pro athletes don't just train their body.", "why_trending": "Mental health content has universal appeal"},
+            {"id": "t8", "title": "What happens to your body when you quit sugar for 30 days", "hook": "Day 1 is hell. Day 30 is transformation.", "why_trending": "Before/after format content has maximum completion rate"},
+        ],
+        "tech":           [
+            {"id": "t1", "title": "5 free tools that replace $500/month software", "hook": "Stop paying for tools you don't need.", "why_trending": "Cost-cutting tool content spikes during economic uncertainty"},
+            {"id": "t2", "title": "The browser extension that saves me 2 hours a day", "hook": "I installed it. I never uninstalled it.", "why_trending": "Specific tool recommendations drive the highest CTR"},
+            {"id": "t3", "title": "Why your phone is secretly hurting your focus", "hook": "It's not social media. It's the notifications.", "why_trending": "Screen time and focus content is perennial"},
+            {"id": "t4", "title": "The keyboard shortcut most people never learn", "hook": "I've used computers for 20 years. I learned this last year.", "why_trending": "Productivity shortcuts have the highest save-to-view ratio"},
+            {"id": "t5", "title": "How I automated my entire workflow for $0", "hook": "Every task I hated is now done automatically.", "why_trending": "No-code automation content is exploding"},
+            {"id": "t6", "title": "The tech setup that made me 3x more productive", "hook": "Same hours. Three times the output.", "why_trending": "Desk setup/workflow reveals are highly shareable"},
+            {"id": "t7", "title": "Why I deleted all my apps and started over", "hook": "200 apps. Now I use 12.", "why_trending": "Digital minimalism content drives high engagement"},
+            {"id": "t8", "title": "The security setting every phone user needs to turn on", "hook": "Your phone is not as secure as you think.", "why_trending": "Security awareness content drives fear-based shares"},
+        ],
+        "productivity":   [
+            {"id": "t1", "title": "The 2-minute rule that clears your to-do list", "hook": "If it takes 2 minutes, do it now. Not later.", "why_trending": "GTD-based content is perennially top-performing"},
+            {"id": "t2", "title": "Why your to-do list is making you less productive", "hook": "The problem isn't your tasks. It's your list.", "why_trending": "Contrarian productivity content drives debate"},
+            {"id": "t3", "title": "The focus technique used by Navy SEALs", "hook": "When distraction is life or death, you learn to focus.", "why_trending": "Elite performance frameworks drive aspiration content"},
+            {"id": "t4", "title": "How I get more done in 4 hours than most in 8", "hook": "Work less. Do more. It's not magic.", "why_trending": "4-hour workday content is a perennial viral format"},
+            {"id": "t5", "title": "The Sunday planning system that changed my weeks", "hook": "One hour on Sunday saves 10 hours during the week.", "why_trending": "Weekly planning systems have the highest save rates"},
+            {"id": "t6", "title": "Stop multitasking — it's costing you 40% of your brain", "hook": "Multitasking isn't a skill. It's a myth.", "why_trending": "Scientific backing for habit change drives credibility"},
+            {"id": "t7", "title": "The email habit that saves 90 minutes a day", "hook": "I check email twice a day. That's it.", "why_trending": "Email productivity is universally relatable"},
+            {"id": "t8", "title": "Why the most productive people have boring mornings", "hook": "No cold plunge. No meditation app. Just boring habits.", "why_trending": "Contrarian morning routine content outperforms conventional"},
+        ],
+        "marketing":      [
+            {"id": "t1", "title": "The hook formula that gets 90% of people to stop scrolling", "hook": "3 seconds. That's all you have to grab attention.", "why_trending": "Short-form hook writing is the #1 skill marketers want"},
+            {"id": "t2", "title": "Why your personal brand is worth more than your resume", "hook": "Your LinkedIn is your new CV. Most people waste it.", "why_trending": "Personal brand content peaks every Q1"},
+            {"id": "t3", "title": "How to get 10,000 followers without spending a cent", "hook": "No ads. No virality tricks. Just strategy.", "why_trending": "Organic growth tactics are evergreen top-performers"},
+            {"id": "t4", "title": "The content type that gets shared 10x more than anything else", "hook": "I stopped posting opinions. I started posting this.", "why_trending": "Shareable content strategy drives creator growth"},
+            {"id": "t5", "title": "Why most brands fail at social media (and how to fix it)", "hook": "Posting is not a strategy. This is.", "why_trending": "Brand accountability content drives B2B engagement"},
+            {"id": "t6", "title": "The email subject line that gets 60% open rates", "hook": "Most email subjects are wrong. Here's why.", "why_trending": "Email marketing ROI content is top B2B search"},
+            {"id": "t7", "title": "How one piece of content can work across 6 platforms", "hook": "Create once. Publish everywhere. Grow everywhere.", "why_trending": "Content repurposing is the #1 productivity ask"},
+            {"id": "t8", "title": "The storytelling formula that makes anything go viral", "hook": "Every viral video uses this 3-part structure.", "why_trending": "Storytelling frameworks have consistently high save rates"},
+        ],
+        "relationships":  [
+            {"id": "t1", "title": "The 5-second response that defuses any argument", "hook": "Before you react, say this. Every time.", "why_trending": "Conflict resolution content has universal appeal"},
+            {"id": "t2", "title": "Why most friendships fade after 25 (and how to keep yours)", "hook": "Adult friendships die quietly. Here's the rescue.", "why_trending": "Adult friendship anxiety is a top-searched topic"},
+            {"id": "t3", "title": "The communication habit of every successful relationship", "hook": "Happy couples don't fight less. They fight differently.", "why_trending": "Relationship longevity content is perennially viral"},
+            {"id": "t4", "title": "Red flags most people ignore until it's too late", "hook": "The signs were always there. You just didn't know them.", "why_trending": "Red flag content consistently tops engagement charts"},
+            {"id": "t5", "title": "Why setting boundaries is the most loving thing you can do", "hook": "Saying no isn't selfish. It's necessary.", "why_trending": "Boundary content is top-performing mental health adjacent"},
+            {"id": "t6", "title": "The question that tells you if someone truly listens to you", "hook": "Ask this. Their answer tells you everything.", "why_trending": "Relationship litmus-test content drives saves"},
+            {"id": "t7", "title": "How to reconnect with someone after a long silence", "hook": "You don't need a reason. You just need this.", "why_trending": "Reconnection anxiety is widely relatable"},
+            {"id": "t8", "title": "The difference between loneliness and being alone", "hook": "Millions are surrounded by people and still lonely.", "why_trending": "Loneliness is the defining social trend of the decade"},
+        ],
+        "fitness":        [
+            {"id": "t1", "title": "The 10-minute workout that builds more muscle than an hour at the gym", "hook": "Gym rats hate this. Scientists love it.", "why_trending": "Time-efficient fitness content dominates mobile"},
+            {"id": "t2", "title": "Why you're not losing weight despite working out", "hook": "You're doing everything right. And still nothing.", "why_trending": "Plateau-breaking content drives frustrated searchers"},
+            {"id": "t3", "title": "The recovery habit that elite athletes never skip", "hook": "Training hard is 50% of it. This is the other 50%.", "why_trending": "Recovery science content is underserved and growing"},
+            {"id": "t4", "title": "Why your warm-up is more important than your workout", "hook": "The first 5 minutes determine the next 50.", "why_trending": "Pre-workout science content drives high saves"},
+            {"id": "t5", "title": "The protein timing myth fitness influencers still spread", "hook": "The 30-minute anabolic window is not real.", "why_trending": "Myth-busting fitness content drives debate and shares"},
+            {"id": "t6", "title": "How to build muscle without ever going to the gym", "hook": "No membership. No equipment. Real results.", "why_trending": "Home workout demand never drops"},
+            {"id": "t7", "title": "The bodyweight move that replaces 5 gym machines", "hook": "One move. Full body. No excuses.", "why_trending": "Efficiency-focused fitness drives the highest saves"},
+            {"id": "t8", "title": "Why consistency beats intensity every time in fitness", "hook": "The person who shows up wins. Every time.", "why_trending": "Motivational fitness framing drives comment engagement"},
+        ],
+    }
+    all_topics = {**MOCK, **GENERIC}
+    topics = all_topics.get(niche, MOCK["finance"])
     return {"niche": niche, "platform": platform, "topics": topics}
 
 
@@ -265,9 +328,13 @@ def _call_claude(prompt: str) -> str:
             f'type "{prompt_file}" | '
             f'"{claude_cmd}" -p --max-turns 1 --output-format json > "{out_file}"'
         )
-        subprocess.run(bat, shell=True, timeout=90,
-                       cwd=os.path.expanduser("~"),
-                       capture_output=True)
+        r = subprocess.run(bat, shell=True, timeout=90,
+                           cwd=os.path.expanduser("~"),
+                           capture_output=True)
+
+        if r.returncode != 0:
+            stderr = r.stderr.decode("utf-8", errors="replace")[:300] if r.stderr else ""
+            raise RuntimeError(f"claude exited {r.returncode}: {stderr}")
 
         if not os.path.exists(out_file) or os.path.getsize(out_file) == 0:
             raise RuntimeError("claude produced no output")
