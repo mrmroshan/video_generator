@@ -77,16 +77,20 @@ NICHES = {
     },
 }
 
-TOPIC_PROMPT = """You are a viral video content strategist for {platform}.
+TOPIC_PROMPT = """You are a viral short-form video content strategist.
 
-Generate 8 trending, highly engaging video topic ideas for the niche: "{niche_label}"
+Generate 8 trending, highly specific video topic ideas for the niche: "{niche_label}"
+
+AUDIENCE: {audience}
+TONE: {tone}
+HOOK STYLES THAT WORK FOR THIS NICHE: {hook_styles}
 
 Rules:
 - Output ONLY valid JSON — no markdown, no explanation, no code fences
-- Each topic must be specific, not generic (not "how to save money" — yes "The 3 bank accounts every 20-something needs")
-- Each topic must have a punchy hook line that grabs attention in 2 seconds
-- Topics must be evergreen AND currently trending
-- Platform rules: {platform_rules}
+- Each topic must be SPECIFIC, not generic (not "how to save money" → yes "The 3 bank accounts every 20-something needs")
+- Each topic must have a punchy hook that grabs in the first 2 seconds using one of the hook styles above
+- Topics must be evergreen AND feel current — tap into what this audience is anxious or curious about RIGHT NOW
+- why_trending must reference a real tension, trend, or anxiety in this audience
 
 Output this exact JSON structure:
 {{
@@ -96,28 +100,36 @@ Output this exact JSON structure:
     {{
       "id": "t1",
       "title": "...",
-      "hook": "One punchy sentence that opens the video",
-      "why_trending": "One sentence on why this works right now"
+      "hook": "One punchy opening sentence that stops the scroll",
+      "why_trending": "One sentence on why this hits for this audience right now"
     }}
   ]
 }}"""
 
-SCRIPT_PROMPT = """You are a video script writer for short-form vertical video (Shorts/Reels).
+SCRIPT_PROMPT = """You are a world-class short-form video script writer.
 
-Generate a video script for the topic: \"{topic}\"
+Write a 70-90 second Shorts/Reels script for this topic: "{topic}"
 
-Rules:
-- Output ONLY valid JSON — no markdown, no explanation, no code fences
-- {platform_rules}
-- Every scene MUST have a specific, descriptive broll_prompt (10+ words)
-- Keep voiceover_text punchy, conversational, and hook-driven
-- Generate exactly 7 scenes
-- Scene 1 must open with a strong hook (question, bold claim, or shocking fact) — 8-12s
-- Scenes 2-6 deliver the value — 10-14s each
-- Scene 7 closes with a call to action — 8-12s
-- Total voiceover should read at speaking pace to ~70-90 seconds
+AUDIENCE: {audience}
+TONE & VOICE: {tone}
+LANGUAGE STYLE: {language_style}
+HOOK REPERTOIRE (use ONE of these approaches for scene 1): {hook_styles}
+VISUAL STYLE: {broll_style}
 
-Output this exact JSON structure:
+STRUCTURE RULES:
+- 7 scenes total
+- Scene 1 — HOOK (8-12s): Stop the scroll in the first 3 words. Use one hook type from above. Make it impossible to swipe away.
+- Scenes 2-6 — VALUE (10-14s each): Deliver concrete, specific insight. No filler. Each scene = one clear idea. Build to a satisfying arc.
+- Scene 7 — CTA (8-12s): Natural, not salesy. Give them a reason to save, share, or follow.
+
+WRITING RULES:
+- Write like you're talking to ONE person, not an audience
+- Short sentences. Punchy rhythm. No corporate speak.
+- Every sentence must earn its place — cut anything that doesn't inform or hook
+- Use the TONE and LANGUAGE STYLE for this niche consistently throughout
+- B-roll prompts must be SPECIFIC to this topic, not generic stock-photo clichés
+
+Output ONLY this exact JSON — no markdown, no explanation:
 {{
   "title": "...",
   "description": "...",
@@ -133,14 +145,88 @@ Output this exact JSON structure:
   ]
 }}"""
 
+# Per-niche voice guide — passed into both prompts so Claude knows
+# exactly who it's writing for, what tone to use, and what hooks land.
+NICHE_VOICE = {
+    "finance": {
+        "audience": "25-40 year olds anxious about money, wanting financial independence, skeptical of 'get rich quick' but hungry for actionable steps",
+        "tone": "authoritative but accessible — like a smart friend who works in finance, not a banker; direct, credible, slightly urgent",
+        "language_style": "plain English, specific numbers and percentages where possible, avoid jargon unless you immediately explain it",
+        "hook_styles": "shocking stat ('The average person loses $X to Y'), myth-busting ('Stop doing X — it's costing you'), uncomfortable truth ('Most people will never retire because of this one thing'), specific number hook ('3 accounts, $100/month, 1 million dollars')",
+        "broll_style": "clean money visuals — stacks of bills, stock charts, phone showing banking app, person reviewing budget on laptop, real estate, coffee shop receipt, paycheck stub",
+    },
+    "entrepreneurship": {
+        "audience": "aspiring founders and early-stage entrepreneurs 22-38, frustrated with 9-5, looking for permission and practical path to building something",
+        "tone": "honest and real — like a founder 2 years ahead of them, not a guru; mix of encouragement and hard truth, zero hype",
+        "language_style": "conversational, first-person stories work well, specific dollar amounts and timelines build credibility, avoid buzzwords like 'synergy' or 'pivot'",
+        "hook_styles": "personal failure story ('I lost $40k because of this mistake'), contrarian take ('Your business idea doesn't need to be original'), direct identity challenge ('If you do these 3 things, you're not built for a 9-5'), specific result ('One conversation added $50k to my revenue')",
+        "broll_style": "real workspace vibes — laptop with analytics dashboard, person on phone looking stressed then relieved, whiteboard with business plan, home office setup, delivery box with logo, Shopify/Stripe dashboard on screen",
+    },
+    "health": {
+        "audience": "health-conscious 25-45 year olds who feel overwhelmed by conflicting health advice, want simple evidence-based habits, not extreme diets",
+        "tone": "calm, informed, and reassuring — like a knowledgeable friend, not a drill sergeant; science-backed but never condescending",
+        "language_style": "simple biology explanations that make people feel smart, avoid fearmongering, use 'your body' language to make it personal",
+        "hook_styles": "body function reveal ('Your gut has more neurons than your spine — here's why that matters'), myth-bust ('The health advice your doctor never has time to give you'), pattern interrupt ('Stop eating breakfast. Here's what happens'), counterintuitive science ('The cheapest longevity drug costs nothing')",
+        "broll_style": "clean health visuals — fresh food close-ups, person sleeping peacefully, morning routine, bloodwork results on screen, person hiking, doctor consultation, supplement bottles, gut anatomy diagram",
+    },
+    "tech": {
+        "audience": "tech-curious 20-40 year olds who want to stay ahead of trends, use tools to save time, and understand what's actually changing vs hype",
+        "tone": "enthusiastic but grounded — a tech-savvy friend who cuts through the hype and tells you what actually matters and what to ignore",
+        "language_style": "concrete examples over abstract concepts, show the 'so what' for normal people, avoid acronyms without explanation",
+        "hook_styles": "speed demonstration ('This tool does in 30 seconds what took me 3 hours'), future shock ('By 2026 this will replace X — here's what to do now'), tool reveal ('I deleted 10 apps and replaced them with this one'), skeptic flip ('I thought AI was overhyped — then this happened')",
+        "broll_style": "screen recordings of apps working, side-by-side before/after comparisons, person's face reacting to impressive result on screen, futuristic UI, code editor, notification on phone, product demo",
+    },
+    "mindset": {
+        "audience": "self-improvement seekers 22-38 who feel stuck or unfulfilled despite doing 'everything right', looking for a perspective shift not a 5-step list",
+        "tone": "philosophical and calm but with urgency — Stoic-influenced, measured, the kind of voice that makes you pause and think",
+        "language_style": "thoughtful and layered — ask questions that stick, use short punchy sentences after longer setups, reference psychology/philosophy lightly without being academic",
+        "hook_styles": "assumption challenge ('You're not lazy. You're operating on the wrong goal'), identity reframe ('The person you want to become already exists — you're just not acting like them yet'), uncomfortable truth ('Nobody is coming to save you'), paradox opener ('The more you chase happiness, the further it gets')",
+        "broll_style": "contemplative visuals — person alone looking at horizon, journaling, meditating at sunrise, slow-motion walk in nature, hands writing, clock ticking, minimalist room, person staring out window in thought",
+    },
+    "productivity": {
+        "audience": "ambitious 25-40 year olds who feel overwhelmed and behind, want to work smarter not harder, frustrated that their effort isn't converting to results",
+        "tone": "practical and no-nonsense — like a systems thinker who has already optimised their life and is showing you the shortcut, zero fluff",
+        "language_style": "specific, numbered, actionable — 'Do X, then Y, in Z minutes' structure works well, use before/after framing",
+        "hook_styles": "time shock ('I saved 3 hours a day by stopping this one habit'), system reveal ('This $0 system is why I never miss a deadline'), myth-bust ('Your to-do list is why you're unproductive'), speed challenge ('I ran my entire week in 20 minutes on Sunday')",
+        "broll_style": "clean desk with minimal setup, calendar/task app on screen, timer running, person focused typing with no distractions, physical notebook with clear handwriting, morning routine time-lapse, phone with notifications turned off",
+    },
+    "ai": {
+        "audience": "knowledge workers and entrepreneurs 25-45 who want to use AI to save time and stay competitive, not be replaced, a mix of excited and anxious",
+        "tone": "pragmatic and forward-thinking — someone who has actually used these tools at depth and is sharing what actually works, not what's impressive in a demo",
+        "language_style": "show don't tell — specific tool names, exact prompts, real results with numbers; avoid 'revolutionary' and 'game-changing' — show the actual game change",
+        "hook_styles": "live result ('I gave this prompt to Claude and got this in 8 seconds'), replacement reveal ('I let go of my copywriter. This tool replaced them'), capability shock ('ChatGPT can do this — most people have no idea'), personal ROI ('This AI workflow saves me 12 hours every week')",
+        "broll_style": "screen capture of AI tool in action, side-by-side prompt and output, chat interface with impressive response, before/after work comparison, person's face reacting to AI output, workflow automation diagram",
+    },
+    "marketing": {
+        "audience": "small business owners, creators, and marketers 25-40 who feel like they're shouting into the void — posting consistently but not growing",
+        "tone": "sharp, savvy, and slightly provocative — a marketing insider who knows the game and isn't afraid to call out what's not working",
+        "language_style": "direct and opinionated, use platform-specific language (algorithm, hooks, retention), back claims with examples or numbers from real accounts",
+        "hook_styles": "platform insider reveal ('The algorithm change nobody is talking about'), counter-strategy ('Stop posting daily — here's what actually grows accounts'), case study hook ('This 60-second video got 2 million views — here's the exact structure'), myth-bust ('Engagement rate means nothing. Here's what does')",
+        "broll_style": "social media analytics dashboard, content calendar, person filming vertical video, comment section showing engagement, viral video screenshot, brand logo, ad creative mockup, phone with growing follower count",
+    },
+    "relationships": {
+        "audience": "20-35 year olds navigating dating, early relationships, or wanting to improve how they connect with others — looking for real insight not generic advice",
+        "tone": "warm but honest — like a psychologically-literate friend who tells you the truth with compassion, not judgment",
+        "language_style": "relatable scenarios and specific examples, 'you've probably done this' framing, psychology-informed without being clinical",
+        "hook_styles": "relatable scenario ('If you go quiet when you're upset, this is for you'), psychology reveal ('There's a word for what you're feeling — and once you know it, everything makes sense'), uncomfortable mirror ('The reason your relationships keep failing has nothing to do with the other person'), pattern interrupt ('Stop trying to fix your communication — do this instead')",
+        "broll_style": "couple interactions (tasteful), person alone looking thoughtful, phone with message thread, coffee conversation, person journaling about a relationship, hands intertwined, person looking relieved after a conversation",
+    },
+    "fitness": {
+        "audience": "25-40 year olds who want to get fit but are confused by conflicting advice, short on time, and skeptical of extreme programs — want sustainable results",
+        "tone": "motivating but realistic — a knowledgeable training partner who respects that you have a life outside the gym, zero bro-science",
+        "language_style": "energetic and direct, specific numbers (sets, reps, minutes, weeks), use 'your body' language, debunk myths with simple science",
+        "hook_styles": "result promise with timeframe ('3 exercises. 20 minutes. Every major muscle group'), myth-bust ('Doing cardio to lose weight is keeping you fat'), science flip ('Your muscle is built outside the gym — here's why'), transformation hook ('I changed one thing in my routine and lost 8kg in 10 weeks')",
+        "broll_style": "gym close-ups (weights, cables, machines), person demonstrating exercise with correct form, transformation split-screen, healthy meal prep, sleep tracker showing 8 hours, protein shake, person checking physique in mirror with satisfaction",
+    },
+}
+
 PLATFORM_RULES = {
-    # All platforms now use Shorts format (9:16 vertical, 60-90s)
-    # platform field stored on job for distribution metadata only
-    "tiktok":    "Shorts style — punchy hook scene_01 (8-12s), value delivery scenes 2-6 (10-14s each), CTA scene 7 (8-12s), total 70-90s, 9:16 vertical framing",
-    "youtube":   "Shorts style — punchy hook scene_01 (8-12s), value delivery scenes 2-6 (10-14s each), CTA scene 7 (8-12s), total 70-90s, 9:16 vertical framing",
-    "instagram": "Reels style — punchy hook scene_01 (8-12s), value delivery scenes 2-6 (10-14s each), CTA scene 7 (8-12s), total 70-90s, 9:16 vertical framing",
-    "facebook":  "Reels style — punchy hook scene_01 (8-12s), value delivery scenes 2-6 (10-14s each), CTA scene 7 (8-12s), total 70-90s, 9:16 vertical framing",
-    "shorts":    "Shorts style — punchy hook scene_01 (8-12s), value delivery scenes 2-6 (10-14s each), CTA scene 7 (8-12s), total 70-90s, 9:16 vertical framing",
+    # All platforms use Shorts/Reels format (9:16 vertical, 70-90s)
+    "tiktok":    "TikTok Shorts — hook must land in first 3 words, punchy rhythm, 70-90s total",
+    "youtube":   "YouTube Shorts — hook must land in first 3 words, punchy rhythm, 70-90s total",
+    "instagram": "Instagram Reels — hook must land in first 3 words, punchy rhythm, 70-90s total",
+    "facebook":  "Facebook Reels — hook must land in first 3 words, punchy rhythm, 70-90s total",
+    "shorts":    "Shorts/Reels — hook must land in first 3 words, punchy rhythm, 70-90s total",
 }
 
 
@@ -152,12 +238,15 @@ def generate_topic_ideas(niche: str, platform: str) -> dict:
     if os.getenv("MOCK_APIS", "true").lower() == "true":
         return _mock_topics(niche, platform)
 
-    niche_info = NICHES.get(niche, NICHES["finance"])
+    niche_info  = NICHES.get(niche, NICHES["finance"])
+    voice       = NICHE_VOICE.get(niche, NICHE_VOICE["finance"])
     prompt = TOPIC_PROMPT.format(
         platform=platform,
         niche_label=niche_info["label"],
         niche_key=niche,
-        platform_rules=PLATFORM_RULES.get(platform, PLATFORM_RULES["youtube"]),
+        audience=voice["audience"],
+        tone=voice["tone"],
+        hook_styles=voice["hook_styles"],
     )
 
     try:
@@ -283,9 +372,10 @@ def _mock_topics(niche: str, platform: str) -> dict:
     return {"niche": niche, "platform": platform, "topics": topics}
 
 
-def generate_script(topic: str, platform: str) -> dict:
+def generate_script(topic: str, platform: str, niche: str = "finance") -> dict:
     """
-    Generate a full job blueprint JSON for a given topic and platform.
+    Generate a full job blueprint JSON for a given topic, platform, and niche.
+    Niche is used to inject audience/tone/hook context into the prompt.
     Uses Claude Max subscription via claude CLI. Falls back to mock if unavailable.
     """
     if MOCK_APIS:
@@ -293,7 +383,7 @@ def generate_script(topic: str, platform: str) -> dict:
         return _mock_blueprint(topic, platform)
 
     try:
-        return _generate_with_claude(topic, platform)
+        return _generate_with_claude(topic, platform, niche)
     except Exception as e:
         print(f"[WARN] Claude CLI failed ({e}), falling back to mock")
         return _mock_blueprint(topic, platform)
@@ -372,19 +462,24 @@ def _call_claude(prompt: str) -> str:
     return raw_text
 
 
-def _generate_with_claude(topic: str, platform: str) -> dict:
+def _generate_with_claude(topic: str, platform: str, niche: str = "finance") -> dict:
     """Call claude -p to generate the script JSON using Claude Max subscription."""
     import tempfile
 
+    voice = NICHE_VOICE.get(niche, NICHE_VOICE["finance"])
     prompt = SCRIPT_PROMPT.format(
         topic=topic,
         platform=platform,
-        platform_rules=PLATFORM_RULES.get(platform, PLATFORM_RULES["youtube"]),
+        audience=voice["audience"],
+        tone=voice["tone"],
+        language_style=voice["language_style"],
+        hook_styles=voice["hook_styles"],
+        broll_style=voice["broll_style"],
     )
 
     claude_cmd = _get_claude_cmd()
 
-    print(f"🤖 Generating script via Claude Max for: '{topic}' ({platform})")
+    print(f"🤖 Generating script via Claude Max for: '{topic}' ({platform}, {niche})")
 
     # Write prompt to a temp file and run from user home to avoid CLAUDE.md interference
     with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as pf:

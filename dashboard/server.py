@@ -186,7 +186,7 @@ def _run_wizard_pipeline(job_id: str, payload: "CreateJobPayload"):
         # Phase 1 — Script (always Shorts/9:16, primary platform drives rules)
         update_progress(job_id, "generating_script", "Claude is writing your script...")
         topic = payload.topic_title
-        job   = generate_script(topic, primary)
+        job   = generate_script(topic, primary, niche=payload.niche)
         # Preserve wizard metadata + carry forward progress fields
         job["job_id"]           = job_id
         job["niche"]            = payload.niche
