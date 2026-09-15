@@ -1,12 +1,25 @@
-# VIDEO MAKER — Automated Video Generation Pipeline
+# Video Generator — Automated Short-Form Video Pipeline
 
-End-to-end video production: topic → script → TTS → B-roll → captions → review → export.
+End-to-end short-form video production: niche → topic → AI script → TTS voiceover → B-roll → captions → review → multi-platform export.
+
+## Features
+
+- **Job Creation Wizard** — pick niche, select platforms, auto-generate 7-scene Shorts script
+- **Multi-Platform** — one 70-90s script rendered to 720×1280 (9:16), auto-exported to TikTok / Instagram / YouTube Shorts / Facebook Reels
+- **AI Script** — Claude Max generates hook → value → CTA structure per niche
+- **TTS Voiceover** — ElevenLabs Adam voice (eleven_multilingual_v2)
+- **Karaoke Captions** — Whisper word-level timestamps → word-by-word highlight sync
+- **B-roll** — Pexels stock footage per scene
+- **Review Dashboard** — edit script, swap B-roll, reorder scenes, change caption style
+- **Save Draft** — save edits without committing to render; come back later
+- **Approve & Render** — lock approved jobs → FFmpeg render → captioned MP4
 
 ## Quick Start
 
 ### Prerequisites
+
 - Python 3.10+
-- Node.js 18+ (for dashboard)
+- Node.js 18+
 - FFmpeg 5+ in PATH
 - `claude` CLI: `npm install -g @anthropic-ai/claude-code` (logged in with Max subscription)
 
@@ -15,54 +28,111 @@ End-to-end video production: topic → script → TTS → B-roll → captions �
 ```bash
 pip install -r requirements.txt
 cp .env.example .env
-# Edit .env: set ELEVENLABS_API_KEY, PEXELS_API_KEY
+# Edit .env: set ELEVENLABS_API_KEY and PEXELS_API_KEY
 
 cd dashboard && npm install && cd ..
+```
+
+### Run
+
+```bash
+# Terminal 1 — API server
+python -m uvicorn dashboard.server:app --host 127.0.0.1 --port 8001
+
+# Terminal 2 — React dashboard (dev)
+cd dashboard && npm run dev
+
+# Open http://localhost:5173
+```
+
+Or use the convenience script:
+
+```bash
 bash start.sh
 ```
 
-### Generate a video
+### API docs
 
-```bash
-# Mock mode (no API calls)
-MOCK_APIS=true python pipeline.py --topic "5 AI tools" --platform youtube
-
-# Live mode
-python pipeline.py --topic "5 AI tools" --platform youtube
-
-# Review dashboard  →  http://localhost:5173
-# API docs          →  http://localhost:8000/docs
-```
+`http://localhost:8001/docs`
 
 ## Architecture
 
 ```
-Topic → Phase 1: Claude script   → Phase 2: ElevenLabs TTS + Whisper + Pexels
-      → Phase 3: Human review    → Phase 4: FFmpeg render + captions
-      → Phase 5: Export (YouTube / TikTok / Instagram / Facebook)
+Wizard
+  → Niche + Topic + Platform selection
+  → Phase 1: Claude Max script (7 scenes, 70-90s, Shorts structure)
+  → Phase 2: ElevenLabs TTS + Whisper timestamps + Pexels B-roll
+  → Review dashboard (edit / save draft / approve)
+  → Phase 3: FFmpeg render at 720×1280 (9:16 master)
+  → Phase 4: Auto-export to all selected platforms
 ```
 
-## Platform Export Sizes
+## Job Status Flow
 
-| Platform | Size | Use |
-|---|---|---|
-| YouTube / Facebook | 1280×720 | 16:9 landscape |
-| TikTok / IG Reels / FB Reels | 720×1280 | 9:16 vertical |
-| Instagram Post | 720×720 | 1:1 square |
+```
+pending → in_review → draft (save draft) → approved → rendering → done
+                   └──────────────────────────────────────────────↑
+```
+
+## Platform Exports
+
+All platforms use **9:16 vertical** (Shorts / Reels format):
+
+| Platform | Dimensions | Format |
+|----------|-----------|--------|
+| TikTok | 720×1280 | TikTok video |
+| Instagram | 720×1280 | Reels |
+| YouTube | 720×1280 | Shorts |
+| Facebook | 720×1280 | Reels |
 
 ## Caption Styles
 
-`clean` · `cinematic` · `tiktok` · `minimal` · `karaoke` · `karaoke_tiktok` · `karaoke_fire`
+| Style | Description |
+|-------|-------------|
+| `karaoke` | Word-by-word highlight (default) |
+| `karaoke_tiktok` | Bold centre highlight, Impact font |
+| `karaoke_fire` | Animated fire effect highlight |
+| `clean` | Static subtitle, clean font |
+| `cinematic` | Cinematic lower-third style |
+| `tiktok` | Giant Impact, thick outline |
+| `minimal` | Minimal bottom caption |
 
-Karaoke styles use Whisper word-level timestamps for word-by-word highlight sync.
+Karaoke styles use Whisper word-level timestamps for frame-accurate sync.
+
+## Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ELEVENLABS_API_KEY` | Yes | ElevenLabs TTS API key |
+| `PEXELS_API_KEY` | Yes | Pexels stock footage API key |
+| `MOCK_APIS` | No | `true` to skip all API calls (dev/test) |
+| `CLAUDE_CMD` | No | Override path to `claude` CLI |
+
+See `.env.example` for all variables.
 
 ## Development
 
 ```bash
-pytest tests/ -v          # run test suite
-npm run build --prefix dashboard  # build frontend
+# Run tests
+python -m pytest tests/ -v
+
+# Build frontend
+npm run build --prefix dashboard
+
+# Mock mode (no API calls, instant)
+MOCK_APIS=true python pipeline.py --topic "5 AI tools"
 ```
 
-## Environment Variables
+## Tech Stack
 
-See `.env.example` for all required variables and documentation.
+| Layer | Tech |
+|-------|------|
+| Script AI | Claude Max (claude-opus-4) via `claude -p` CLI |
+| TTS | ElevenLabs Adam — eleven_multilingual_v2 |
+| Timestamps | faster-whisper 1.2.1 — base model, CPU int8 |
+| B-roll | Pexels API |
+| Render | FFmpeg 5+ (libx264 baseline, ASS subtitles) |
+| Backend | FastAPI + uvicorn |
+| Frontend | React + Vite |
+| Storage | SQLite (via `data/db.py`) |
+| Tests | pytest — 57 tests |

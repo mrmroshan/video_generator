@@ -4,7 +4,11 @@
 # Job data (large media files)
 data/jobs/
 data/*.db
+data/*.db-shm
+data/*.db-wal
 *.db
+*.db-shm
+*.db-wal
 
 # Build artefacts
 dashboard/dist/
@@ -20,8 +24,10 @@ __pycache__/
 # Temp render artefacts
 *.bat
 concat.txt
+concat_nocap.txt
 *_composed.mp4
 
 # OS
 .DS_Store
 Thumbs.db
+
