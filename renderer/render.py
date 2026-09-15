@@ -71,8 +71,8 @@ def render_job(job: dict, caption_style: str = None) -> str:
 
 def export_platform(job: dict, platform: str) -> str:
     """
-    Crop/letterbox the master output.mp4 to a specific platform size.
-    The master must already exist (call render_job first).
+    Crop/letterbox the master (caption-free) to a platform size,
+    then burn captions sized for that exact resolution.
     Returns path to the platform-specific file.
     """
     platform = _canonical_platform(platform)
@@ -80,17 +80,23 @@ def export_platform(job: dict, platform: str) -> str:
         raise ValueError(f"Unknown platform: {platform}")
 
     job_dir = os.path.join(JOBS_DIR, job["job_id"])
-    master  = os.path.join(job_dir, "output.mp4")
-    if not os.path.exists(master):
-        raise FileNotFoundError(f"Master not found: {master} — run render_job first")
+    # Use the uncaptioned master for cropping so we can burn correct-sized captions
+    master_nocap = os.path.join(job_dir, "output_nocap.mp4")
+    master       = os.path.join(job_dir, "output.mp4")
+
+    # Prefer the caption-free master; fall back to the captioned one
+    src = master_nocap if os.path.exists(master_nocap) else master
+    if not os.path.exists(src):
+        raise FileNotFoundError(f"Master not found: {src} — run render_job first")
 
     w, h, label, _ = PLATFORMS[platform]
-    out = os.path.join(job_dir, f"output_{platform}.mp4")
+    out      = os.path.join(job_dir, f"output_{platform}.mp4")
+    out_crop = os.path.join(job_dir, f"output_{platform}_crop.mp4")
 
-    # Probe master dimensions
+    # Probe source dimensions
     r = subprocess.run(
         ["ffprobe", "-v", "quiet", "-print_format", "json",
-         "-show_streams", "-select_streams", "v:0", master],
+         "-show_streams", "-select_streams", "v:0", src],
         capture_output=True, text=True
     )
     vstream = next(
@@ -99,22 +105,80 @@ def export_platform(job: dict, platform: str) -> str:
     )
     src_w, src_h = vstream["width"], vstream["height"]
 
-    # Build scale + letterbox/crop filter
+    # Step 1: crop/scale to platform size (no captions yet)
     vf = _platform_vf(src_w, src_h, w, h)
-
-    print(f"  Exporting [{label}] {w}×{h}...", end=" ", flush=True)
+    print(f"  Cropping [{label}] {w}×{h}...", end=" ", flush=True)
     r = subprocess.run([
-        "ffmpeg", "-y", "-i", master,
+        "ffmpeg", "-y", "-i", src,
         "-vf", vf,
         "-c:v", "libx264", "-profile:v", "baseline", "-preset", "fast", "-crf", "23",
         "-c:a", "copy",
-        out,
+        out_crop,
     ], capture_output=True, text=True)
     if r.returncode != 0:
-        raise RuntimeError(f"Export failed for {platform}:\n{r.stderr[-400:]}")
+        raise RuntimeError(f"Crop failed for {platform}:\n{r.stderr[-400:]}")
+
+    # Step 2: burn captions sized for this exact resolution
+    caption_style = job.get("caption_style", "karaoke")
+    use_karaoke   = caption_style.startswith("karaoke")
+
+    if use_karaoke and any(s.get("timestamps") for s in job.get("scenes", [])):
+        # Rebuild per-platform karaoke: concatenate all scene timestamp lists
+        # with cumulative offsets matching the cropped video timeline
+        _burn_karaoke_platform(job, out_crop, out, w, h, caption_style)
+        try: os.unlink(out_crop)
+        except: pass
+    else:
+        # Static captions or no timestamps — simple rename
+        os.replace(out_crop, out)
+
     sz = os.path.getsize(out) // 1024
     print(f"{sz}KB ✓")
     return out
+
+
+def _burn_karaoke_platform(job: dict, video_in: str, video_out: str,
+                            width: int, height: int, style: str):
+    """
+    Burn karaoke captions into a full-length platform video.
+    Timestamps are stitched across all scenes with cumulative time offsets.
+    """
+    from renderer.captions import make_karaoke_ass, burn_karaoke
+    import tempfile
+
+    # Build a single word list for the whole video with cumulative offsets
+    all_words = []
+    t_offset  = 0.0
+    for scene in job.get("scenes", []):
+        ts  = scene.get("timestamps", [])
+        dur = scene.get("actual_duration", scene.get("target_duration_seconds", 5.0))
+        for w in ts:
+            all_words.append({
+                "word":  w["word"],
+                "start": w["start"] + t_offset,
+                "end":   w["end"]   + t_offset,
+            })
+        t_offset += dur
+
+    if not all_words:
+        # No timestamps — just pass through unchanged
+        import shutil
+        shutil.move(video_in, video_out)
+        return
+
+    # Probe total duration of the cropped video
+    r = subprocess.run(
+        ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_streams", video_in],
+        capture_output=True, text=True
+    )
+    total_dur = max(
+        (float(s["duration"]) for s in json.loads(r.stdout).get("streams", []) if "duration" in s),
+        default=t_offset
+    )
+
+    burn_karaoke(video_in, all_words, total_dur,
+                 style=style, out_path=video_out,
+                 audio_path=None, width=width, height=height)
 
 
 def export_all_platforms(job: dict) -> dict:
@@ -268,7 +332,8 @@ def _render_ffmpeg(job: dict, caption_style: str = None) -> str:
             from renderer.captions import burn_karaoke
             # No audio_offset needed — WAV was extracted from composed, ts=0 aligned
             burn_karaoke(composed, scene["timestamps"], audio_dur,
-                         style=style, out_path=captioned, audio_path=None)
+                         style=style, out_path=captioned,
+                         audio_path=None, width=width, height=height)
         else:
             from renderer.captions import burn_captions
             static = style if not use_karaoke else "clean"
@@ -284,7 +349,21 @@ def _render_ffmpeg(job: dict, caption_style: str = None) -> str:
     if not scene_files:
         raise RuntimeError("No scenes rendered successfully")
 
-    # ── Concat ───────────────────────────────────────────────────────
+    # Concat all scenes → caption-free master (used by export_platform for per-platform captions)
+    nocap_output = os.path.join(job_dir, "output_nocap.mp4")
+    concat_file  = os.path.join(job_dir, "concat_nocap.txt")
+    composed_files = [scene["composed_path"] for scene in job["scenes"]
+                      if scene.get("composed_path") and os.path.exists(scene.get("composed_path",""))]
+    if composed_files:
+        with open(concat_file, "w") as f:
+            for sf in composed_files:
+                f.write(f"file '{os.path.abspath(sf).replace(chr(92),'/')}'\n")
+        subprocess.run(
+            ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", concat_file, "-c", "copy", nocap_output],
+            capture_output=True, text=True
+        )
+
+    # Concat captioned scenes → final output.mp4
     concat_file = os.path.join(job_dir, "concat.txt")
     with open(concat_file, "w") as f:
         for sf in scene_files:

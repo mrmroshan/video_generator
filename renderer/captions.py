@@ -261,11 +261,13 @@ KARAOKE_STYLES = {
 
 
 def make_karaoke_ass(
-    words: list,          # [{"word": str, "start": float, "end": float}, ...]
+    words: list,
     total_duration: float,
     style_name: str = "karaoke",
-    line_max_chars: int = 30,
-    audio_offset: float = 0.0,   # MP3 start_time offset — shift all timestamps forward
+    audio_offset: float = 0.0,
+    line_max_chars: int = 32,
+    width: int = 1280,
+    height: int = 720,
 ) -> str:
     """
     Generate an ASS subtitle file with word-by-word karaoke highlighting.
@@ -303,9 +305,15 @@ def make_karaoke_ass(
         )
 
     # Extend each word's display to the next word's start (covers gaps/pauses)
+    # MAX_HOLD caps the bridge so captions don't visually freeze during long silences
+    MAX_HOLD = 0.35  # seconds — beyond this, drop caption and let next phrase fade in fresh
     for i in range(len(adj) - 1):
-        adj[i]["disp_end"] = adj[i + 1]["start"]
-    adj[-1]["disp_end"] = min(total_duration, adj[-1]["end"] + 1.5)  # hold last word
+        gap = adj[i + 1]["start"] - adj[i]["end"]
+        if gap <= MAX_HOLD:
+            adj[i]["disp_end"] = adj[i + 1]["start"]   # bridge across short pause
+        else:
+            adj[i]["disp_end"] = adj[i]["end"] + MAX_HOLD  # release after MAX_HOLD
+    adj[-1]["disp_end"] = min(total_duration, adj[-1]["end"] + 1.2)  # hold last word
 
     # ── Split words into phrase groups ────────────────────────────────
     phrases = []
@@ -323,16 +331,26 @@ def make_karaoke_ass(
         phrases.append(current)
 
     # Extend last word of each phrase to reach next phrase's first word
+    # (only if the gap is small — otherwise the last word holds for MAX_HOLD already)
     for pi in range(len(phrases) - 1):
         next_phrase_start = phrases[pi + 1][0]["start"]
-        phrases[pi][-1]["disp_end"] = next_phrase_start
+        last_word = phrases[pi][-1]
+        gap = next_phrase_start - last_word["end"]
+        if gap <= MAX_HOLD:
+            last_word["disp_end"] = next_phrase_start
+        # else: already capped at end + MAX_HOLD from above loop
 
-    # ── Build ASS header ──────────────────────────────────────────────
+    # ── Build ASS header — use actual video dimensions ────────────────
+    # Font size and margins scale proportionally to video height
+    scale = height / 720.0
+    scaled_size   = max(24, int(st["size"]   * scale))
+    scaled_margin = max(20, int(st["margin_v"] * scale))
+
     ass_lines = [
         "[Script Info]",
         "ScriptType: v4.00+",
-        "PlayResX: 1280",
-        "PlayResY: 720",
+        f"PlayResX: {width}",
+        f"PlayResY: {height}",
         "WrapStyle: 0",
         "ScaledBorderAndShadow: yes",
         "",
@@ -343,12 +361,12 @@ def make_karaoke_ass(
     ]
 
     ass_lines.append(
-        f"Style: Base,{st['font']},{st['size']},"
+        f"Style: Base,{st['font']},{scaled_size},"
         f"{st['rest_color']},{st['rest_color']},"
         f"{st['outline_col']},{st['back_col']},"
         f"{st['bold']},0,0,0,100,100,0,0,1,"
         f"{st['outline']},{st['shadow']},"
-        f"{st['alignment']},{st['margin_l']},{st['margin_r']},{st['margin_v']},1"
+        f"{st['alignment']},{st['margin_l']},{st['margin_r']},{scaled_margin},1"
     )
 
     ass_lines += ["", "[Events]",
@@ -396,11 +414,14 @@ def burn_karaoke(
     style: str = "karaoke",
     out_path: str = None,
     audio_path: str = None,   # if supplied, auto-detect MP3 start_time offset
+    width: int = 1280,
+    height: int = 720,
 ) -> str:
     """
     Burn word-by-word karaoke captions into a video clip.
     `words` = list of {"word", "start", "end"} from Whisper.
     `audio_path` = original MP3 — used to measure start_time offset automatically.
+    `width`/`height` — actual video dimensions for correct ASS PlayRes + font scaling.
     """
     if not out_path:
         out_path = video_path.replace("_composed.mp4", "_captioned.mp4")
@@ -422,7 +443,8 @@ def burn_karaoke(
             pass
 
     ass_content = make_karaoke_ass(words, total_duration, style_name=style,
-                                   audio_offset=audio_offset)
+                                   audio_offset=audio_offset,
+                                   width=width, height=height)
     ass_file    = video_path + ".karaoke.ass"
     with open(ass_file, "w", encoding="utf-8") as f:
         f.write(ass_content)
