@@ -195,7 +195,7 @@ def test_project_stats_counts(client, project):
 # ── Start video from topic ────────────────────────────────────────────────────
 
 def test_start_video_from_topic(client, project):
-    from data.db import add_topics
+    from data.db import add_topics, load_job
     added = add_topics(project["project_id"], [{"title": "Video topic", "hook": "Hook", "why_trending": ""}])
     tid = added[0]["topic_id"]
 
@@ -205,6 +205,16 @@ def test_start_video_from_topic(client, project):
     assert "job_id" in d
     assert d["topic_id"] == tid
     assert d["status"] == "pending"
+
+    # Verify linkage survives after pipeline overwrites job with script blueprint
+    job = load_job(d["job_id"])
+    assert job is not None
+    # project_id and topic_id must be preserved through generate_script overwrite
+    # (set via _run_wizard_pipeline after generate_script returns)
+    # In mock mode the pipeline runs synchronously via TestClient
+    assert job.get("project_id") == project["project_id"], "project_id lost after save_job"
+    assert job.get("topic_id") == tid, "topic_id lost after save_job"
+    assert job.get("niche") == project["niche"]
 
 
 def test_start_video_already_in_progress(client, project):

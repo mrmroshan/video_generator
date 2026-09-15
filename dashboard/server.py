@@ -202,6 +202,11 @@ def _run_wizard_pipeline(job_id: str, payload: "CreateJobPayload"):
         job["status"]           = "pending"
         job["progress_phase"]   = "generating_script"
         job["progress_detail"]  = "Script complete — generating audio..."
+        # Preserve project/topic linkage if started from topic bank
+        if hasattr(payload, "project_id") and payload.project_id:
+            job["project_id"] = payload.project_id
+        if hasattr(payload, "topic_id") and payload.topic_id:
+            job["topic_id"] = payload.topic_id
         save_job(job)
 
         # Phase 2 — Audio
@@ -1061,12 +1066,17 @@ def start_video_from_topic(project_id: str, topic_id: str,
         raise HTTPException(409, f"Topic already has a video in progress (job: {topic.get('job_id')})")
 
     # Build a CreateJobPayload and call the same pipeline
+    _project_id = project_id   # capture for inner class
+    _topic_id   = topic_id
+
     class _TopicPayload:
         topic_title   = topic["title"]
         topic_hook    = topic.get("hook", "")
         niche         = project["niche"]
         platforms     = project.get("platforms", ["tiktok", "instagram", "youtube", "facebook"])
         caption_style = "karaoke"
+        project_id    = _project_id
+        topic_id      = _topic_id
 
     import uuid
     from datetime import datetime, timezone
