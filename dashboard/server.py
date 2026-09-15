@@ -30,7 +30,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 
-from data.db import init_db, list_jobs, load_job, save_job, update_status
+from data.db import init_db, list_jobs, load_job, save_job, update_status, update_progress
 from assets.stock import _search_pexels, _download_video
 
 
@@ -48,6 +48,176 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Wizard: Niches, Topics, Create ────────────────────────────────────
+
+@app.get("/niches")
+def get_niches():
+    """Return all available niches with metadata."""
+    from orchestration.crew import NICHES
+    return {"niches": NICHES}
+
+
+class TopicsPayload(BaseModel):
+    niche:    str
+    platform: str = "youtube"
+
+
+@app.post("/topics")
+def get_topics(payload: TopicsPayload, background_tasks: BackgroundTasks):
+    """Generate 8 trending topic ideas for a niche. Returns immediately with job_id for polling."""
+    from orchestration.crew import NICHES
+    if payload.niche not in NICHES:
+        raise HTTPException(422, f"Unknown niche '{payload.niche}'. Choose from: {sorted(NICHES)}")
+
+    from orchestration.crew import generate_topic_ideas
+    # Call synchronously — topic gen is fast (Claude or mock)
+    try:
+        result = generate_topic_ideas(payload.niche, payload.platform)
+        return result
+    except Exception as e:
+        raise HTTPException(500, f"Topic generation failed: {e}")
+
+
+class CreateJobPayload(BaseModel):
+    niche:          str
+    topic_title:    str
+    topic_hook:     str = ""
+    platform:       str = "youtube"
+    caption_style:  str = "karaoke"
+
+
+@app.post("/jobs/create")
+def create_job(payload: CreateJobPayload, background_tasks: BackgroundTasks):
+    """
+    Wizard entry point: niche + topic → full async pipeline.
+    Returns job_id immediately. Client polls GET /jobs/{id}/progress.
+    """
+    from orchestration.crew import NICHES
+    if payload.niche not in NICHES:
+        raise HTTPException(422, f"Unknown niche '{payload.niche}'")
+    if not payload.topic_title.strip():
+        raise HTTPException(422, "topic_title cannot be empty")
+
+    # Pre-create the job record so the UI can poll immediately
+    import uuid
+    from datetime import datetime, timezone
+    job_id = str(uuid.uuid4())
+    job = {
+        "job_id":         job_id,
+        "status":         "pending",
+        "platform":       payload.platform,
+        "niche":          payload.niche,
+        "topic":          payload.topic_title,
+        "topic_hook":     payload.topic_hook,
+        "caption_style":  payload.caption_style,
+        "created_at":     datetime.now(timezone.utc).isoformat(),
+        "scenes":         [],
+        "progress_phase": "queued",
+        "progress_detail": "Queued — starting now...",
+    }
+    from data.db import init_db
+    init_db()
+    save_job(job)
+
+    background_tasks.add_task(_run_wizard_pipeline, job_id, payload)
+    return {"job_id": job_id, "status": "pending",
+            "message": "Pipeline started. Poll GET /jobs/{job_id}/progress"}
+
+
+@app.get("/jobs/{job_id}/progress")
+def job_progress(job_id: str):
+    """
+    Lightweight poll endpoint for the wizard generating screen.
+    Returns phase + detail + status so the UI can show live progress.
+    """
+    job = load_job(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    return {
+        "job_id":          job_id,
+        "status":          job["status"],
+        "progress_phase":  job.get("progress_phase",  "queued"),
+        "progress_detail": job.get("progress_detail", ""),
+        "progress_updated_at": job.get("progress_updated_at", ""),
+        "ready":  job["status"] == "in_review",
+        "failed": job["status"] == "failed",
+        "title":  job.get("title", job.get("topic", "")),
+        "niche":  job.get("niche", ""),
+        "platform": job.get("platform", "youtube"),
+        "scene_count": len(job.get("scenes", [])),
+    }
+
+
+def _run_wizard_pipeline(job_id: str, payload: "CreateJobPayload"):
+    """
+    Background task: runs the full pipeline for the wizard flow.
+    Updates progress_phase at each step so the UI can show live status.
+    """
+    import sys, os
+    sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
+    with open(str(__import__("pathlib").Path(__file__).parent.parent / ".env")) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+
+    from data.db import update_progress, update_status, load_job, save_job
+    from orchestration.crew import generate_script
+    from audio.tts import generate_audio_for_job
+    from audio.timestamps import extract_timestamps
+    from assets.stock import fetch_broll_for_job
+
+    try:
+        # Phase 1 — Script
+        update_progress(job_id, "generating_script", "Claude is writing your script...")
+        topic = payload.topic_title
+        job   = generate_script(topic, payload.platform)
+        # Preserve wizard metadata
+        job["job_id"]        = job_id
+        job["niche"]         = payload.niche
+        job["topic"]         = topic
+        job["topic_hook"]    = payload.topic_hook
+        job["caption_style"] = payload.caption_style
+        job["status"]        = "pending"
+        job["progress_phase"] = "generating_script"
+        save_job(job)
+
+        # Phase 2 — Audio
+        update_progress(job_id, "generating_audio", f"Generating voiceover for {len(job['scenes'])} scenes...")
+        job = generate_audio_for_job(job)
+        save_job(job)
+
+        # Phase 3 — Timestamps
+        update_progress(job_id, "extracting_timestamps", "Extracting word-level timestamps with Whisper...")
+        for scene in job["scenes"]:
+            try:
+                extract_timestamps(scene)
+            except Exception as e:
+                print(f"  [WARN] Timestamps failed for {scene['scene_id']}: {e}")
+        save_job(job)
+
+        # Phase 4 — B-roll
+        update_progress(job_id, "downloading_broll", "Downloading B-roll clips from Pexels...")
+        job = fetch_broll_for_job(job)
+        save_job(job)
+
+        # Done — hand off to review
+        job["status"]         = "in_review"
+        job["progress_phase"] = "ready_for_review"
+        job["progress_detail"] = "Ready! Opening review dashboard..."
+        save_job(job)
+        print(f"[WIZARD] Job {job_id} ready for review")
+
+    except Exception as e:
+        print(f"[WIZARD ERROR] {job_id}: {e}")
+        try:
+            update_progress(job_id, "failed", str(e)[:200])
+            update_status(job_id, "failed")
+        except Exception:
+            pass
+
 
 # ── Jobs ──────────────────────────────────────────────────────────────
 

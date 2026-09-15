@@ -1,15 +1,10 @@
-"""
-DATABASE — SQLite job store
-Tracks all jobs and their status transitions.
-"""
 import os
-import sqlite3
 import json
-from datetime import datetime, timezone
+import sqlite3
 from pathlib import Path
 
-_HERE = Path(__file__).parent
-DB_PATH = os.getenv("DB_PATH", str(_HERE / "video_maker.db"))
+_ROOT   = Path(__file__).parent.parent
+DB_PATH = os.getenv("DB_PATH", str(_ROOT / "data" / "video_maker.db"))
 
 
 def get_connection():
@@ -20,49 +15,42 @@ def get_connection():
 
 
 def init_db():
-    """Create tables if they don't exist"""
     with get_connection() as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS jobs (
-                job_id      TEXT PRIMARY KEY,
-                status      TEXT NOT NULL DEFAULT 'pending',
-                platform    TEXT NOT NULL,
-                title       TEXT,
-                blueprint   TEXT NOT NULL,
-                created_at  TEXT NOT NULL,
-                approved_at TEXT,
-                output_path TEXT
+                job_id     TEXT PRIMARY KEY,
+                status     TEXT NOT NULL,
+                platform   TEXT NOT NULL DEFAULT 'youtube',
+                created_at TEXT NOT NULL,
+                blueprint  TEXT NOT NULL
             )
-        """)
-        conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status)
         """)
     print(f"DB initialized at {DB_PATH}")
 
 
 def save_job(job: dict):
-    """Insert or replace a job record"""
     with get_connection() as conn:
-        conn.execute("""
-            INSERT OR REPLACE INTO jobs
-              (job_id, status, platform, title, blueprint, created_at, approved_at, output_path)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            job["job_id"],
-            job["status"],
-            job["platform"],
-            job.get("title"),
-            json.dumps(job),
-            job["created_at"],
-            job.get("approved_at"),
-            job.get("output_path"),
-        ))
+        conn.execute(
+            """INSERT OR REPLACE INTO jobs (job_id, status, platform, created_at, blueprint)
+               VALUES (?, ?, ?, ?, ?)""",
+            (
+                job["job_id"],
+                job["status"],
+                job.get("platform", "youtube"),
+                job.get("created_at", ""),
+                json.dumps(job),
+            ),
+        )
 
 
 def load_job(job_id: str) -> dict | None:
     with get_connection() as conn:
-        row = conn.execute("SELECT blueprint FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
-    return json.loads(row["blueprint"]) if row else None
+        row = conn.execute(
+            "SELECT blueprint FROM jobs WHERE job_id = ?", (job_id,)
+        ).fetchone()
+    if not row:
+        return None
+    return json.loads(row["blueprint"])
 
 
 def update_status(job_id: str, status: str, extra: dict = None):
@@ -72,7 +60,6 @@ def update_status(job_id: str, status: str, extra: dict = None):
         raise ValueError(f"Invalid status: {status}")
 
     if extra:
-        # Extra fields require loading the full blueprint
         job = load_job(job_id)
         if not job:
             raise ValueError(f"Job not found: {job_id}")
@@ -81,7 +68,6 @@ def update_status(job_id: str, status: str, extra: dict = None):
         save_job(job)
         return
 
-    # Status-only: single atomic SQL UPDATE + blueprint sync
     with get_connection() as conn:
         result = conn.execute(
             "UPDATE jobs SET status = ? WHERE job_id = ?",
@@ -89,7 +75,6 @@ def update_status(job_id: str, status: str, extra: dict = None):
         )
         if result.rowcount == 0:
             raise ValueError(f"Job not found: {job_id}")
-        # Keep blueprint JSON consistent with status column
         row = conn.execute("SELECT blueprint FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
         if row:
             blueprint = json.loads(row["blueprint"])
@@ -98,6 +83,25 @@ def update_status(job_id: str, status: str, extra: dict = None):
                 "UPDATE jobs SET blueprint = ? WHERE job_id = ?",
                 (json.dumps(blueprint), job_id)
             )
+
+
+def update_progress(job_id: str, phase: str, detail: str = ""):
+    """Record pipeline progress so the UI can show live phase status."""
+    allowed_phases = {
+        "queued", "generating_script", "generating_audio",
+        "extracting_timestamps", "downloading_broll",
+        "ready_for_review", "failed"
+    }
+    if phase not in allowed_phases:
+        phase = "queued"
+    job = load_job(job_id)
+    if not job:
+        return
+    job["progress_phase"]      = phase
+    job["progress_detail"]     = detail
+    from datetime import datetime, timezone
+    job["progress_updated_at"] = datetime.now(timezone.utc).isoformat()
+    save_job(job)
 
 
 def list_jobs(status: str = None) -> list:

@@ -123,3 +123,72 @@ def test_caption_text_endpoint_is_edited_false_initially(client, tmp_db):
     sid = job["scenes"][0]["scene_id"]
     res = client.get(f"/jobs/{job['job_id']}/scenes/{sid}/caption-text")
     assert res.json()["is_edited"] == False
+
+
+# ── Wizard endpoint tests ────────────────────────────────────────────────────
+
+def test_niches_endpoint_returns_10_niches(client):
+    res = client.get("/niches")
+    assert res.status_code == 200
+    niches = res.json()["niches"]
+    assert len(niches) == 10
+    # Each niche has required fields
+    for key, niche in niches.items():
+        assert "label" in niche and "icon" in niche and "color" in niche
+
+
+def test_topics_unknown_niche_rejected(client):
+    res = client.post("/topics", json={"niche": "astrology", "platform": "youtube"})
+    assert res.status_code == 422
+
+
+def test_topics_returns_8_topics(client):
+    res = client.post("/topics", json={"niche": "finance", "platform": "youtube"})
+    assert res.status_code == 200
+    data = res.json()
+    assert "topics" in data
+    assert len(data["topics"]) == 8
+    for t in data["topics"]:
+        assert "title" in t and "hook" in t
+
+
+def test_create_job_unknown_niche_rejected(client):
+    res = client.post("/jobs/create", json={
+        "niche": "astrology", "topic_title": "Stars and money",
+        "platform": "youtube"
+    })
+    assert res.status_code == 422
+
+
+def test_create_job_empty_topic_rejected(client):
+    res = client.post("/jobs/create", json={
+        "niche": "finance", "topic_title": "  ",
+        "platform": "youtube"
+    })
+    assert res.status_code == 422
+
+
+def test_create_job_returns_job_id(client):
+    res = client.post("/jobs/create", json={
+        "niche": "finance",
+        "topic_title": "Test topic for wizard",
+        "platform": "youtube"
+    })
+    assert res.status_code == 200
+    data = res.json()
+    assert "job_id" in data
+    assert len(data["job_id"]) == 36  # UUID
+
+
+def test_job_progress_endpoint(client, tmp_db):
+    from orchestration.crew import _mock_blueprint
+    job = _mock_blueprint("test", "youtube")
+    job["progress_phase"] = "generating_script"
+    job["progress_detail"] = "Writing..."
+    tmp_db.save_job(job)
+    res = client.get(f"/jobs/{job['job_id']}/progress")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["progress_phase"] == "generating_script"
+    assert data["ready"] == False
+    assert data["failed"] == False
