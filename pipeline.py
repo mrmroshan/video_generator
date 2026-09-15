@@ -1,6 +1,6 @@
 """
 PIPELINE RUNNER — orchestrates all phases end to end
-Run: python pipeline.py --topic "solar energy" --platform tiktok
+Run: python pipeline.py --topic "solar energy" --niche finance --platform tiktok
 """
 import argparse
 import json
@@ -19,17 +19,18 @@ from renderer.render import render_job
 from distribution.publishers.distribute import distribute
 
 
-def run_pipeline(topic: str, platform: str):
+def run_pipeline(topic: str, platform: str, niche: str = "finance"):
     print(f"\n🎬 Starting VIDEO MAKER pipeline")
-    print(f"   Topic: {topic} | Platform: {platform}\n")
+    print(f"   Topic: {topic} | Niche: {niche} | Platform: {platform}\n")
 
     init_db()
     job = {}
 
     try:
-        # Phase 1 — Script
+        # Phase 1 — Script (niche-aware: injects audience/tone/hooks)
         print("── Phase 1: Generating script...")
-        job = generate_script(topic, platform)
+        job = generate_script(topic, platform, niche=niche)
+        job["niche"] = niche
         save_job(job)
         print(f"   Job ID: {job['job_id']} ✓")
 
@@ -89,8 +90,15 @@ def run_pipeline(topic: str, platform: str):
 
 
 if __name__ == "__main__":
+    VALID_NICHES = ["finance", "entrepreneurship", "health", "tech", "mindset",
+                    "productivity", "ai", "marketing", "relationships", "fitness"]
+    VALID_PLATFORMS = ["youtube", "tiktok", "instagram", "facebook"]
+
     parser = argparse.ArgumentParser(description="VIDEO MAKER pipeline")
-    parser.add_argument("--topic", required=True, help="Video topic")
-    parser.add_argument("--platform", choices=["youtube", "tiktok"], default="tiktok")
+    parser.add_argument("--topic",    required=True, help="Video topic")
+    parser.add_argument("--niche",    choices=VALID_NICHES,    default="finance",
+                        help="Content niche (drives audience/tone/hooks)")
+    parser.add_argument("--platform", choices=VALID_PLATFORMS, default="tiktok",
+                        help="Primary platform for script style")
     args = parser.parse_args()
-    run_pipeline(args.topic, args.platform)
+    run_pipeline(args.topic, args.platform, niche=args.niche)

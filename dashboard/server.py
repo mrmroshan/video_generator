@@ -2,7 +2,7 @@
 Phase 3: Review Dashboard — FastAPI backend
 Serves job data, handles caption edits, B-roll swaps, approvals, and media streaming.
 
-Run: uvicorn dashboard.server:app --reload --port 8000
+Run: uvicorn dashboard.server:app --host 127.0.0.1 --port 8001
 """
 import os
 import sys

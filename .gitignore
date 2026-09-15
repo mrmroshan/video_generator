@@ -31,3 +31,7 @@ concat_nocap.txt
 .DS_Store
 Thumbs.db
 
+# Editor / tool temp files
+.hermes-tmp*/
+*.tmp
+

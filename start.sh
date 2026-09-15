@@ -7,16 +7,16 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 echo "🎬 Video Maker Dashboard"
 echo ""
 
-# Start FastAPI backend
-echo "▶ Starting API server on http://localhost:8000 ..."
+# Start FastAPI backend on port 8001
+echo "▶ Starting API server on http://localhost:8001 ..."
 cd "$ROOT"
-python -m uvicorn dashboard.server:app --port 8000 --reload &
+python -m uvicorn dashboard.server:app --host 127.0.0.1 --port 8001 &
 API_PID=$!
 
-# Wait for API to be ready
+# Wait for API to be ready (up to 10s)
 for i in {1..10}; do
   sleep 1
-  if curl -s http://localhost:8000/jobs > /dev/null 2>&1; then
+  if curl -s http://localhost:8001/jobs > /dev/null 2>&1; then
     echo "  ✓ API ready"
     break
   fi
@@ -31,7 +31,7 @@ UI_PID=$!
 echo ""
 echo "✅ Dashboard running:"
 echo "   UI  → http://localhost:5173"
-echo "   API → http://localhost:8000"
+echo "   API → http://localhost:8001/docs"
 echo ""
 echo "Press Ctrl+C to stop both servers."
 
