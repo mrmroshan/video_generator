@@ -4,6 +4,7 @@ const STATUS_LABELS = {
   pending: 'Pending',
   generating_assets: 'Generating',
   in_review: 'In Review',
+  draft: 'Draft',
   approved: 'Approved',
   rendering: 'Rendering',
   distributing: 'Distributing',

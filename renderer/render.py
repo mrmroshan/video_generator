@@ -6,11 +6,10 @@ Phase 4: Renderer — FFmpeg pipeline
   4. Concat all scenes → master output
   5. Crop/letterbox master to any platform size (no re-encode, just filters)
 
-PLATFORM SIZES (all from a single master 1280×720 render):
-  youtube   — 1280×720  (16:9)
-  tiktok    — 720×1280  (9:16)  ← also Instagram/Facebook Reels
-  instagram — 720×720   (1:1)   ← Facebook Post square
-  facebook  — 1280×720  (16:9)  ← Facebook video post (landscape)
+PLATFORM SIZES (all from a single master 720×1280 render):
+  All platforms export as Shorts/Reels — 9:16 vertical (720×1280).
+  youtube, tiktok, instagram, facebook — all identical dimensions.
+  One master render, copied to all selected platforms (no crop).
 
 Karaoke sync fix:
   We used to run Whisper on the original MP3, which has a 25ms start_time
@@ -33,10 +32,12 @@ DEFAULT_CAPTION_STYLE = "clean"
 # ── Platform specs ────────────────────────────────────────────────────
 # Each entry: (width, height, label, description)
 PLATFORMS = {
-    "youtube":   (1280, 720,  "YouTube",          "16:9 landscape — standard YouTube/Facebook video"),
-    "tiktok":    (720,  1280, "TikTok",           "9:16 vertical — TikTok, Instagram Reels, Facebook Reels"),
-    "instagram": (720,  720,  "Instagram Square", "1:1 square — Instagram/Facebook post"),
-    "facebook":  (1280, 720,  "Facebook",         "16:9 landscape — Facebook video post"),
+    # All platforms now export as Shorts/Reels — 9:16 vertical (720×1280).
+    # One master render, copied to all selected platforms (no per-platform crop).
+    "youtube":   (720,  1280, "YouTube",          "9:16 vertical — YouTube Shorts"),
+    "tiktok":    (720,  1280, "TikTok",           "9:16 vertical — TikTok video"),
+    "instagram": (720,  1280, "Instagram",        "9:16 vertical — Instagram Reels"),
+    "facebook":  (720,  1280, "Facebook",         "9:16 vertical — Facebook Reels"),
 }
 
 # Aliases: any of these map to the canonical platform key
