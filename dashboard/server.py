@@ -158,7 +158,7 @@ def job_progress(job_id: str):
         "progress_phase":  job.get("progress_phase",  "queued"),
         "progress_detail": job.get("progress_detail", ""),
         "progress_updated_at": job.get("progress_updated_at", ""),
-        "ready":  job["status"] == "in_review",
+        "ready":  job["status"] in ("in_review", "draft"),
         "failed": job["status"] == "failed",
         "title":  job.get("title", job.get("topic", "")),
         "niche":  job.get("niche", ""),
@@ -285,7 +285,7 @@ def patch_scene(job_id: str, scene_id: str, patch: CaptionPatch):
             raise HTTPException(422, "Duration must be between 1 and 60 seconds")
         scene["target_duration_seconds"] = patch.target_duration_seconds
 
-    if job["status"] != "in_review":
+    if job["status"] not in ("in_review", "draft"):
         job["status"] = "in_review"
 
     save_job(job)
@@ -310,7 +310,7 @@ def reorder_scenes(job_id: str, payload: ReorderPayload):
         raise HTTPException(422, f"Unknown scene IDs: {missing}")
 
     job["scenes"] = [scene_map[sid] for sid in payload.scene_ids]
-    if job["status"] != "in_review":
+    if job["status"] not in ("in_review", "draft"):
         job["status"] = "in_review"
 
     save_job(job)
@@ -423,7 +423,7 @@ def pick_broll(job_id: str, scene_id: str, payload: PickBrollPayload):
         "height":       payload.height,
         "duration":     payload.duration,
     }
-    if job["status"] != "in_review":
+    if job["status"] not in ("in_review", "draft"):
         job["status"] = "in_review"
 
     save_job(job)
@@ -816,6 +816,22 @@ def render_status(job_id: str):
 
 
 
+@app.post("/jobs/{job_id}/save-draft")
+def save_draft(job_id: str):
+    """
+    Explicitly mark a job as 'draft' — edits saved, not yet approved.
+    Can be called multiple times; always returns the updated job.
+    Allowed from: in_review, draft (idempotent re-save).
+    """
+    job = load_job(job_id)
+    if not job:
+        raise HTTPException(404, f"Job not found: {job_id}")
+    if job["status"] in ("approved", "rendering", "done"):
+        raise HTTPException(409, f"Cannot save draft — job is already '{job['status']}'")
+    update_status(job_id, "draft", {"draft_saved_at": datetime.now(timezone.utc).isoformat()})
+    return load_job(job_id)
+
+
 @app.post("/jobs/{job_id}/approve")
 def approve_job(job_id: str):
     job = load_job(job_id)
@@ -825,7 +841,7 @@ def approve_job(job_id: str):
         raise HTTPException(409, f"Cannot approve a job with status '{job['status']}'")
     # Block approval if the wizard pipeline hasn't finished yet
     progress_phase = job.get("progress_phase", "")
-    if progress_phase not in ("ready_for_review", "") and job["status"] != "in_review":
+    if progress_phase not in ("ready_for_review", "") and job["status"] not in ("in_review", "draft"):
         raise HTTPException(409, f"Job is still generating (phase: {progress_phase!r}) — wait until it reaches review")
     if not job.get("scenes"):
         raise HTTPException(409, "Job has no scenes yet — pipeline may still be running")

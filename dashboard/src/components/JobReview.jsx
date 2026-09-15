@@ -5,16 +5,25 @@ import CaptionStylePicker from './CaptionStylePicker.jsx'
 import { formatDistanceToNow } from '../utils/time.js'
 
 export default function JobReview({ job, onBack, onUpdate }) {
-  const [approving, setApproving]     = useState(false)
-  const [rendering, setRendering]     = useState(false)
-  const [activeScene, setActiveScene] = useState(job.scenes?.[0]?.scene_id || null)
-  const sceneRefs  = useRef({})
-  const pollRef    = useRef(null)   // render poll interval — stored for cleanup
-  const locked     = job.status === 'approved' || job.status === 'done'
-  const rendered   = job.status === 'done' && job.output_path
+  const [approving, setApproving]       = useState(false)
+  const [rendering, setRendering]       = useState(false)
+  const [savingDraft, setSavingDraft]   = useState(false)
+  const [draftSaved, setDraftSaved]     = useState(false)   // flash confirmation
+  const [activeScene, setActiveScene]   = useState(job.scenes?.[0]?.scene_id || null)
+  const sceneRefs    = useRef({})
+  const pollRef      = useRef(null)
+  const draftTimeout = useRef(null)
 
-  // Clean up any lingering render poll when component unmounts
-  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current) }, [])
+  const isDraft  = job.status === 'draft'
+  const locked   = job.status === 'approved' || job.status === 'done'
+  const rendered = job.status === 'done' && job.output_path
+  const editable = !locked   // in_review OR draft
+
+  // Clean up intervals on unmount
+  useEffect(() => () => {
+    if (pollRef.current)      clearInterval(pollRef.current)
+    if (draftTimeout.current) clearTimeout(draftTimeout.current)
+  }, [])
 
   const handleSelectScene = (sceneId) => {
     setActiveScene(sceneId)
@@ -34,8 +43,21 @@ export default function JobReview({ job, onBack, onUpdate }) {
     } catch (e) { alert('Reorder failed: ' + e.message) }
   }
 
+  const saveDraft = async () => {
+    setSavingDraft(true)
+    try {
+      const res = await fetch(`/api/jobs/${job.job_id}/save-draft`, { method: 'POST' })
+      if (!res.ok) throw new Error(await res.text())
+      onUpdate(await res.json())
+      setDraftSaved(true)
+      if (draftTimeout.current) clearTimeout(draftTimeout.current)
+      draftTimeout.current = setTimeout(() => setDraftSaved(false), 3000)
+    } catch (e) { alert('Save draft failed: ' + e.message) }
+    finally { setSavingDraft(false) }
+  }
+
   const approve = async () => {
-    if (!confirm('Lock this job as approved? No further edits will be possible.')) return
+    if (!confirm('Approve and lock for render? Edits will no longer be possible.')) return
     setApproving(true)
     try {
       const res = await fetch(`/api/jobs/${job.job_id}/approve`, { method: 'POST' })
@@ -111,9 +133,22 @@ export default function JobReview({ job, onBack, onUpdate }) {
               {rendering ? '⏳ Rendering… (checking every 3s)' : '🎬 Render MP4'}
             </button>
           ) : (
-            <button className="btn-approve" onClick={approve} disabled={approving}>
-              {approving ? 'Approving…' : '✓ Approve & Lock'}
-            </button>
+            <>
+              {/* Save Draft — available while editing (in_review or draft) */}
+              <button
+                className={`btn-save-draft${draftSaved ? ' saved' : ''}`}
+                onClick={saveDraft}
+                disabled={savingDraft}
+                title="Save your edits as a draft. Come back and keep editing anytime."
+              >
+                {savingDraft ? 'Saving…' : draftSaved ? '✓ Draft saved!' : isDraft ? '💾 Re-save Draft' : '💾 Save Draft'}
+              </button>
+
+              {/* Approve — locks for render */}
+              <button className="btn-approve" onClick={approve} disabled={approving}>
+                {approving ? 'Approving…' : '✓ Approve & Lock'}
+              </button>
+            </>
           )}
         </div>
       </div>

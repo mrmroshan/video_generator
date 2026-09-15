@@ -55,7 +55,7 @@ def load_job(job_id: str) -> dict | None:
 
 def update_status(job_id: str, status: str, extra: dict = None):
     """Update job status. Uses direct SQL UPDATE for status-only changes (atomic)."""
-    allowed = {"pending", "generating_assets", "in_review", "approved", "rendering", "distributing", "done", "failed"}
+    allowed = {"pending", "generating_assets", "in_review", "draft", "approved", "rendering", "distributing", "done", "failed"}
     if status not in allowed:
         raise ValueError(f"Invalid status: {status}")
 

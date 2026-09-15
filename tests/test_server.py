@@ -255,3 +255,85 @@ def test_create_job_empty_platforms_rejected(client):
         "niche": "finance", "topic_title": "test", "platforms": []
     })
     assert res.status_code == 422
+
+
+# ── Draft save tests ─────────────────────────────────────────────────────────
+
+def test_save_draft_from_in_review(client, tmp_path):
+    """POST /save-draft on in_review job sets status=draft."""
+    res = client.post("/jobs/create", json={
+        "niche": "finance", "topic_title": "Draft test", "platforms": ["youtube"]
+    })
+    job_id = res.json()["job_id"]
+    # Manually push to in_review
+    from data.db import load_job, save_job
+    j = load_job(job_id); j["status"] = "in_review"; j["scenes"] = [{"scene_id": "s1"}]; save_job(j)
+
+    res = client.post(f"/jobs/{job_id}/save-draft")
+    assert res.status_code == 200
+    assert res.json()["status"] == "draft"
+    assert "draft_saved_at" in res.json()
+
+
+def test_save_draft_idempotent(client):
+    """Calling save-draft twice on a draft job is idempotent."""
+    res = client.post("/jobs/create", json={
+        "niche": "finance", "topic_title": "Idempotent draft", "platforms": ["tiktok"]
+    })
+    job_id = res.json()["job_id"]
+    from data.db import load_job, save_job
+    j = load_job(job_id); j["status"] = "draft"; j["scenes"] = [{"scene_id": "s1"}]; save_job(j)
+
+    r1 = client.post(f"/jobs/{job_id}/save-draft")
+    r2 = client.post(f"/jobs/{job_id}/save-draft")
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+    assert r2.json()["status"] == "draft"
+
+
+def test_save_draft_blocked_on_approved(client):
+    """POST /save-draft on approved job returns 409."""
+    res = client.post("/jobs/create", json={
+        "niche": "finance", "topic_title": "Approved draft test", "platforms": ["youtube"]
+    })
+    job_id = res.json()["job_id"]
+    from data.db import load_job, save_job
+    j = load_job(job_id); j["status"] = "approved"; j["scenes"] = [{"scene_id": "s1"}]; save_job(j)
+
+    res = client.post(f"/jobs/{job_id}/save-draft")
+    assert res.status_code == 409
+
+
+def test_approve_from_draft(client):
+    """POST /approve on draft job succeeds."""
+    res = client.post("/jobs/create", json={
+        "niche": "finance", "topic_title": "Approve from draft", "platforms": ["youtube"]
+    })
+    job_id = res.json()["job_id"]
+    from data.db import load_job, save_job
+    j = load_job(job_id)
+    j["status"] = "draft"; j["scenes"] = [{"scene_id": "s1"}]
+    j["progress_phase"] = "ready_for_review"
+    save_job(j)
+
+    res = client.post(f"/jobs/{job_id}/approve")
+    assert res.status_code == 200
+    assert res.json()["status"] == "approved"
+
+
+def test_patch_scene_preserves_draft_status(client):
+    """Editing a scene on a draft job keeps status=draft (not reset to in_review)."""
+    res = client.post("/jobs/create", json={
+        "niche": "finance", "topic_title": "Draft scene edit", "platforms": ["youtube"]
+    })
+    job_id = res.json()["job_id"]
+    from data.db import load_job, save_job
+    j = load_job(job_id)
+    j["status"] = "draft"
+    j["scenes"] = [{"scene_id": "scene_01", "voiceover_text": "original"}]
+    save_job(j)
+
+    res = client.patch(f"/jobs/{job_id}/scenes/scene_01",
+                       json={"voiceover_text": "updated text"})
+    assert res.status_code == 200
+    assert res.json()["status"] == "draft", "Status must remain draft after scene edit"
