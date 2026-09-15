@@ -4,6 +4,75 @@ import Timeline from './Timeline.jsx'
 import CaptionStylePicker from './CaptionStylePicker.jsx'
 import { formatDistanceToNow } from '../utils/time.js'
 
+// ── Publish Copy Panel ────────────────────────────────────────────────────────
+const COPY_FIELDS = [
+  { key: 'hook_line',           label: '🎯 Hook Line',             mono: false },
+  { key: 'thumbnail_text',      label: '🖼 Thumbnail Text',         mono: true  },
+  { key: 'youtube_title',       label: '▶️ YouTube Title',          mono: false },
+  { key: 'youtube_description', label: '▶️ YouTube Description',    mono: false },
+  { key: 'tiktok_caption',      label: '🎵 TikTok Caption',         mono: false },
+  { key: 'instagram_caption',   label: '📸 Instagram Caption',      mono: false },
+  { key: 'facebook_caption',    label: '👥 Facebook Caption',       mono: false },
+]
+
+function PublishCopyPanel({ copy, hashtags }) {
+  const [copied, setCopied] = useState({})
+  const [open, setOpen]     = useState(false)
+
+  const doCopy = (key, text) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(c => ({ ...c, [key]: true }))
+      setTimeout(() => setCopied(c => ({ ...c, [key]: false })), 1800)
+    })
+  }
+
+  return (
+    <div className="publish-copy-panel">
+      <button className="publish-copy-toggle" onClick={() => setOpen(o => !o)}>
+        📋 Publish Copy {open ? '▲' : '▼'}
+        <span className="publish-copy-hint">hook · thumbnail · captions for all 4 platforms</span>
+      </button>
+
+      {open && (
+        <div className="publish-copy-body">
+          {COPY_FIELDS.map(({ key, label, mono }) => {
+            const val = copy[key] || ''
+            if (!val) return null
+            return (
+              <div key={key} className="copy-field">
+                <div className="copy-field-header">
+                  <span className="copy-field-label">{label}</span>
+                  <button
+                    className={`btn-copy-field${copied[key] ? ' copied' : ''}`}
+                    onClick={() => doCopy(key, val)}
+                  >
+                    {copied[key] ? '✓ Copied' : 'Copy'}
+                  </button>
+                </div>
+                <div className={`copy-field-value${mono ? ' mono' : ''}`}>{val}</div>
+              </div>
+            )
+          })}
+          {hashtags?.length > 0 && (
+            <div className="copy-field">
+              <div className="copy-field-header">
+                <span className="copy-field-label"># Hashtags</span>
+                <button
+                  className={`btn-copy-field${copied['hashtags'] ? ' copied' : ''}`}
+                  onClick={() => doCopy('hashtags', hashtags.join(' '))}
+                >
+                  {copied['hashtags'] ? '✓ Copied' : 'Copy'}
+                </button>
+              </div>
+              <div className="copy-field-value">{hashtags.join(' ')}</div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function JobReview({ job, onBack, onUpdate }) {
   const [approving, setApproving]       = useState(false)
   const [rendering, setRendering]       = useState(false)
@@ -155,6 +224,9 @@ export default function JobReview({ job, onBack, onUpdate }) {
 
       {/* ── Caption style picker ─────────────────────────────────── */}
       <CaptionStylePicker job={job} onUpdate={onUpdate} />
+
+      {/* ── Publish Copy ──────────────────────────────────────────── */}
+      {job.publish_copy && <PublishCopyPanel copy={job.publish_copy} hashtags={job.hashtags} />}
 
       {/* ── Timeline ─────────────────────────────────────────────── */}
       <Timeline

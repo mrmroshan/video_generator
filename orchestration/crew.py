@@ -106,7 +106,7 @@ Output this exact JSON structure:
   ]
 }}"""
 
-SCRIPT_PROMPT = """You are a world-class short-form video script writer.
+SCRIPT_PROMPT = """You are a world-class short-form video script writer AND social media copywriter.
 
 Write a 70-90 second Shorts/Reels script for this topic: "{topic}"
 
@@ -129,11 +129,29 @@ WRITING RULES:
 - Use the TONE and LANGUAGE STYLE for this niche consistently throughout
 - B-roll prompts must be SPECIFIC to this topic, not generic stock-photo clichés
 
+PUBLISH COPY RULES (written after the script, tuned per platform):
+- hook_line: the standalone opening line from scene 1 — 1 sentence, no context needed, stops the scroll
+- thumbnail_text: 2-5 ALL CAPS bold words for a thumbnail overlay — pure curiosity or shock value
+- youtube_title: SEO-optimised title (50-60 chars), keyword-first, no clickbait
+- youtube_description: 3-4 sentences. First sentence = hook. Then value summary. End with CTA + hashtags (8-10).
+- tiktok_caption: max 150 chars. Punchy, conversational, ends with 3-5 hashtags. Sounds human not corporate.
+- instagram_caption: 2-3 short paragraphs. Hook → value tease → CTA. 5-7 hashtags at end.
+- facebook_caption: 2-3 sentences, conversational, slightly longer than TikTok. No hashtag overload (2-3 max).
+
 Output ONLY this exact JSON — no markdown, no explanation:
 {{
   "title": "...",
   "description": "...",
   "hashtags": ["#tag1", "#tag2", "#tag3", "#tag4", "#tag5"],
+  "publish_copy": {{
+    "hook_line": "...",
+    "thumbnail_text": "...",
+    "youtube_title": "...",
+    "youtube_description": "...",
+    "tiktok_caption": "...",
+    "instagram_caption": "...",
+    "facebook_caption": "..."
+  }},
   "scenes": [
     {{
       "scene_id": "scene_01",
@@ -728,6 +746,15 @@ def _mock_blueprint(topic: str, platform: str) -> dict:
         "title":       f"The Truth About {topic.title()}",
         "description": f"What most people get wrong about {topic} — and how to fix it.",
         "hashtags":    [f"#{topic.replace(' ', '')}", "#shorts", "#fyp", "#reels", "#viral"],
+        "publish_copy": {
+            "hook_line":           f"Nobody talks about what {topic} is actually doing to your life.",
+            "thumbnail_text":      f"{topic.upper().split()[0]} TRUTH REVEALED",
+            "youtube_title":       f"The Truth About {topic.title()} Most People Miss",
+            "youtube_description": f"Nobody talks about what {topic} is actually doing to your life. In this video I break down exactly what you need to know and how to apply it starting today. Save this for later.\n\n#{topic.replace(' ','')} #shorts #fyp #reels #viral",
+            "tiktok_caption":      f"Nobody's talking about this side of {topic} 👀 Save this before it's gone #{topic.replace(' ','')} #shorts #fyp",
+            "instagram_caption":   f"Nobody talks about what {topic} is actually doing to your life.\n\nMost people get this completely wrong — and it's costing them.\n\nSave this and share with someone who needs to hear it.\n\n#{topic.replace(' ','')} #reels #shorts #fyp #viral",
+            "facebook_caption":    f"Most people don't realise what {topic} is actually doing to their life. Watch this — it changed how I think about it completely.",
+        },
         "scenes":      scenes,
         "renderer":    "ffmpeg",
         "created_at":  datetime.now(timezone.utc).isoformat(),

@@ -928,3 +928,34 @@ body {
 .topic-published-badge { font-size: 11px; color: #4caf6e; }
 .topic-job-link    { font-size: 10px; color: #444; font-family: monospace; }
 .topic-published-badge { font-size: 11px; color: #4caf6e; }
+
+/* ── Publish Copy Panel ─────────────────────────────────────────── */
+.publish-copy-panel {
+  background: #0e0e1a; border: 1px solid #1e1e2e; border-radius: 12px;
+  margin: 16px 0; overflow: hidden;
+}
+.publish-copy-toggle {
+  width: 100%; text-align: left; background: none; border: none;
+  color: #ccc; font-size: 13px; font-weight: 700; padding: 14px 16px;
+  cursor: pointer; display: flex; align-items: center; gap: 8px;
+  transition: background .15s;
+}
+.publish-copy-toggle:hover { background: #111; }
+.publish-copy-hint { color: #444; font-size: 11px; font-weight: 400; }
+.publish-copy-body { border-top: 1px solid #1a1a2a; padding: 12px 16px; display: flex; flex-direction: column; gap: 12px; }
+.copy-field { display: flex; flex-direction: column; gap: 4px; }
+.copy-field-header { display: flex; justify-content: space-between; align-items: center; }
+.copy-field-label { font-size: 11px; font-weight: 700; color: #555; text-transform: uppercase; letter-spacing: .04em; }
+.btn-copy-field {
+  background: #1a1a2e; border: 1px solid #2a2a3e; border-radius: 5px;
+  color: #6366f1; font-size: 11px; padding: 3px 8px; cursor: pointer;
+  transition: all .15s; font-weight: 600;
+}
+.btn-copy-field:hover  { background: #2a2a4e; }
+.btn-copy-field.copied { background: #0d1a10; border-color: #254830; color: #4caf6e; }
+.copy-field-value {
+  background: #0b0b14; border: 1px solid #1a1a2a; border-radius: 6px;
+  color: #ccc; font-size: 12px; padding: 8px 10px; line-height: 1.5;
+  white-space: pre-wrap; word-break: break-word;
+}
+.copy-field-value.mono { font-family: monospace; font-size: 13px; font-weight: 700; color: #e0c97f; letter-spacing: .05em; }
