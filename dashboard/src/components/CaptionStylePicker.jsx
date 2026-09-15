@@ -14,7 +14,7 @@ export default function CaptionStylePicker({ job, onUpdate }) {
   const [active, setActive]     = useState(job.caption_style || 'clean')
   const [saving, setSaving]     = useState(false)
   const [previewStyle, setPreview] = useState(null)
-  const locked = job.status === 'approved'
+  const locked = job.status === 'approved' || job.status === 'done' || job.status === 'rendering'
 
   // Sync if job changes externally
   useEffect(() => { setActive(job.caption_style || 'clean') }, [job.caption_style])

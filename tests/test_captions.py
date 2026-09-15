@@ -67,3 +67,70 @@ def test_all_karaoke_styles_valid_ass():
     for style in KARAOKE_STYLES:
         ass = make_karaoke_ass(words, 2.0, style_name=style)
         assert "Dialogue:" in ass
+
+
+# ── parse_caption_edit tests ─────────────────────────────────────────────────
+
+def _orig_words(n=4):
+    return [{"word": f"w{i}", "start": i*0.5, "end": i*0.5+0.4} for i in range(n)]
+
+
+def test_parse_caption_edit_one_to_one():
+    """Same word count: timing preserved exactly, text replaced."""
+    from renderer.captions import parse_caption_edit
+    orig = [
+        {"word": "hello", "start": 0.0, "end": 0.5},
+        {"word": "world", "start": 0.5, "end": 1.0},
+    ]
+    result = parse_caption_edit("hi there", orig)
+    assert len(result) == 2
+    assert result[0]["word"] == "hi"    and result[0]["start"] == 0.0
+    assert result[1]["word"] == "there" and result[1]["end"]   == 1.0
+
+
+def test_parse_caption_edit_fewer_words_no_reversal():
+    """Merging words: start <= end for every result word."""
+    from renderer.captions import parse_caption_edit
+    orig = _orig_words(5)
+    result = parse_caption_edit("fewer words", orig)
+    assert len(result) == 2
+    for r in result:
+        assert r["start"] <= r["end"], f"Reversed timestamp: {r}"
+
+
+def test_parse_caption_edit_more_words_no_exceed_slot():
+    """Splitting a word: end must not exceed original slot end."""
+    from renderer.captions import parse_caption_edit
+    orig = [
+        {"word": "hello", "start": 0.0, "end": 0.5},
+        {"word": "world", "start": 0.5, "end": 1.0},
+    ]
+    result = parse_caption_edit("hel lo world", orig)
+    assert len(result) == 3
+    for r in result:
+        assert r["end"] <= 1.0,  f"Exceeds slot: {r}"
+        assert r["start"] <= r["end"], f"Reversed: {r}"
+
+
+def test_parse_caption_edit_phrase_break_flags():
+    """Newlines produce phrase_break=True on first word of each subsequent line."""
+    from renderer.captions import parse_caption_edit
+    orig = [{"word": w, "start": i*0.3, "end": i*0.3+0.25}
+            for i, w in enumerate(["did", "you", "know", "this", "fact"])]
+    result = parse_caption_edit("did you know\nthis fact", orig)
+    breaks = [r for r in result if r.get("phrase_break")]
+    assert len(breaks) == 1
+    assert breaks[0]["word"] == "this"
+
+
+def test_make_ass_playres_matches_dimensions():
+    """PlayResX/Y must match actual dimensions — not hardcoded 1920x1080."""
+    ass = make_ass("test", 5.0, width=1280, height=720)
+    assert "PlayResX: 1280" in ass
+    assert "PlayResY: 720" in ass
+    assert "1920" not in ass
+    assert "1080" not in ass
+
+    ass_v = make_ass("test", 5.0, width=720, height=1280)
+    assert "PlayResX: 720" in ass_v
+    assert "PlayResY: 1280" in ass_v

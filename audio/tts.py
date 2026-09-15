@@ -54,24 +54,36 @@ def generate_audio_for_job(job: dict, voice: str = DEFAULT_VOICE) -> dict:
             scene["audio_meta"] = {"source": "mock", "voice": voice, "chars": len(scene["voiceover_text"])}
             print(f"[MOCK] Audio for {scene_id} → {audio_path}")
         else:
-            chars = len(scene["voiceover_text"])
-            _call_elevenlabs(
-                text=scene["voiceover_text"],
-                output_path=audio_path,
-                voice_id=VOICES.get(voice, VOICES[DEFAULT_VOICE]),
-                api_key=api_key,
-            )
-            size = os.path.getsize(audio_path)
-            scene["audio_path"] = audio_path
-            scene["audio_meta"] = {
-                "source": "elevenlabs",
-                "voice": voice,
-                "voice_id": VOICES.get(voice, VOICES[DEFAULT_VOICE]),
-                "model": DEFAULT_MODEL,
-                "chars": chars,
-                "size_bytes": size,
-            }
-            print(f"✓ Audio [{scene_id}] — {voice} — {chars} chars — {size:,} bytes")
+            chars = len(scene.get("voiceover_text", ""))
+            if not chars:
+                print(f"  [WARN] {scene_id}: empty voiceover_text — skipping TTS")
+                continue
+            try:
+                _call_elevenlabs(
+                    text=scene["voiceover_text"],
+                    output_path=audio_path,
+                    voice_id=VOICES.get(voice, VOICES[DEFAULT_VOICE]),
+                    api_key=api_key,
+                )
+                size = os.path.getsize(audio_path)
+                scene["audio_path"] = audio_path
+                scene["audio_meta"] = {
+                    "source": "elevenlabs",
+                    "voice": voice,
+                    "voice_id": VOICES.get(voice, VOICES[DEFAULT_VOICE]),
+                    "model": DEFAULT_MODEL,
+                    "chars": chars,
+                    "size_bytes": size,
+                }
+                print(f"✓ Audio [{scene_id}] — {voice} — {chars} chars — {size:,} bytes")
+            except RuntimeError as e:
+                err = str(e)
+                if "429" in err:
+                    print(f"  [ERROR] {scene_id}: ElevenLabs quota exceeded (429) — stopping TTS")
+                    raise
+                print(f"  [WARN] {scene_id}: TTS failed ({err}) — skipping scene")
+                scene["audio_path"] = None
+                scene["audio_meta"] = {"source": "failed", "error": err}
 
     return job
 

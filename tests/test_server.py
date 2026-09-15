@@ -71,3 +71,55 @@ def test_render_status_endpoint(client, tmp_db):
     assert "status" in data
     assert data["done"] is False
     assert data["failed"] is False
+
+
+def test_patch_scene_updates_voiceover(client, tmp_db):
+    """PATCH /scenes updates voiceover_text."""
+    from orchestration.crew import _mock_blueprint
+    job = _mock_blueprint("test", "youtube")
+    job["status"] = "in_review"
+    tmp_db.save_job(job)
+    sid = job["scenes"][0]["scene_id"]
+    res = client.patch(
+        f"/jobs/{job['job_id']}/scenes/{sid}",
+        json={"voiceover_text": "Updated text here"}
+    )
+    assert res.status_code == 200
+    updated = next(s for s in res.json()["scenes"] if s["scene_id"] == sid)
+    assert updated["voiceover_text"] == "Updated text here"
+
+
+def test_set_caption_style_unknown_rejected(client, tmp_db):
+    """PATCH caption-style with unknown style returns 422."""
+    from orchestration.crew import _mock_blueprint
+    job = _mock_blueprint("test", "youtube")
+    tmp_db.save_job(job)
+    res = client.patch(
+        f"/jobs/{job['job_id']}/caption-style",
+        json={"caption_style": "neon_disco"}
+    )
+    assert res.status_code == 422
+
+
+def test_caption_text_endpoint_returns_voiceover_fallback(client, tmp_db):
+    """GET /caption-text without timestamps returns voiceover_text as fallback."""
+    from orchestration.crew import _mock_blueprint
+    job = _mock_blueprint("test", "youtube")
+    tmp_db.save_job(job)
+    sid = job["scenes"][0]["scene_id"]
+    res = client.get(f"/jobs/{job['job_id']}/scenes/{sid}/caption-text")
+    assert res.status_code == 200
+    data = res.json()
+    assert "text" in data
+    assert data["has_timestamps"] == False
+    assert len(data["text"]) > 0
+
+
+def test_caption_text_endpoint_is_edited_false_initially(client, tmp_db):
+    """GET /caption-text returns is_edited=False before any edits."""
+    from orchestration.crew import _mock_blueprint
+    job = _mock_blueprint("test", "youtube")
+    tmp_db.save_job(job)
+    sid = job["scenes"][0]["scene_id"]
+    res = client.get(f"/jobs/{job['job_id']}/scenes/{sid}/caption-text")
+    assert res.json()["is_edited"] == False

@@ -141,14 +141,12 @@ export default function SceneCard({ scene, sceneIndex, jobId, jobStatus, onUpdat
               </div>
             )}
 
-            {/* Caption editor — shown when timestamps exist (after first render) */}
-            {scene.timestamps?.length > 0 && (
-              <CaptionEditor
-                scene={scene}
-                jobId={jobId}
-                onUpdate={onUpdate}
-              />
-            )}
+            {/* Caption editor — always visible; shows approximate timing warning when no timestamps */}
+            <CaptionEditor
+              scene={scene}
+              jobId={jobId}
+              onUpdate={onUpdate}
+            />
 
             {editing && !locked && (
               <div className="caption-actions">

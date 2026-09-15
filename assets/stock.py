@@ -117,14 +117,23 @@ def _search_pexels(query: str, api_key: str = None) -> dict | None:
 
 
 def _download_video(url: str, dest: str):
-    """Download a video from URL to dest path with progress logging."""
+    """Download a video from URL to dest path using chunked streaming (no RAM spike)."""
+    import shutil
     print(f"  Downloading → {dest} ...")
     req = urllib.request.Request(url, headers={
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Referer": "https://www.pexels.com/",
     })
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        with open(dest, "wb") as f:
-            f.write(resp.read())
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            with open(dest, "wb") as f:
+                shutil.copyfileobj(resp, f, length=1024 * 256)  # 256KB chunks
+    except Exception as e:
+        # Clean up partial file on failure
+        try:
+            os.unlink(dest)
+        except OSError:
+            pass
+        raise RuntimeError(f"Download failed for {url}: {e}") from e
     size = os.path.getsize(dest)
     print(f"  Done — {size:,} bytes ({size // 1024} KB)")

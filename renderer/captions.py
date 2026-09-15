@@ -130,13 +130,20 @@ def _wrap_text(text: str, max_chars: int = 38) -> str:
     return r"\N".join(lines)  # ASS line break
 
 
-def make_ass(caption_text: str, duration: float, style_name: str = "clean") -> str:
+def make_ass(caption_text: str, duration: float, style_name: str = "clean",
+             width: int = 1280, height: int = 720) -> str:
     """
     Generate ASS subtitle file content for a single scene caption.
     The caption is displayed for the full scene duration with a 0.3s fade in/out.
+    width/height must match the actual video dimensions so font sizes render correctly.
     """
     st = STYLES.get(style_name, STYLES[DEFAULT_STYLE])
     text = _wrap_text(caption_text.strip(), max_chars=36 if style_name == "tiktok" else 42)
+
+    # Scale font size and margin to actual video height (styles are designed for 720p)
+    scale         = height / 720.0
+    scaled_size   = max(18, int(st['size']   * scale))
+    scaled_margin = max(15, int(st['margin_v'] * scale))
 
     fade_ms = 300
     start   = 0.0
@@ -144,14 +151,14 @@ def make_ass(caption_text: str, duration: float, style_name: str = "clean") -> s
 
     ass = f"""[Script Info]
 ScriptType: v4.00+
-PlayResX: 1920
-PlayResY: 1080
+PlayResX: {width}
+PlayResY: {height}
 WrapStyle: 0
 ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,{st['font']},{st['size']},{st['primary']},{st['secondary']},{st['outline_col']},{st['back_col']},{st['bold']},{st['italic']},0,0,100,100,{st['line_spacing']},0,{st['border_style']},{st['outline']},{st['shadow']},{st['alignment']},{st['margin_l']},{st['margin_r']},{st['margin_v']},1
+Style: Default,{st['font']},{scaled_size},{st['primary']},{st['secondary']},{st['outline_col']},{st['back_col']},{st['bold']},{st['italic']},0,0,100,100,{st['line_spacing']},0,{st['border_style']},{st['outline']},{st['shadow']},{st['alignment']},{st['margin_l']},{st['margin_r']},{scaled_margin},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -168,6 +175,8 @@ def burn_captions(
     audio_duration: float,
     style: str = "clean",
     out_path: str = None,
+    width: int = 1280,
+    height: int = 720,
 ) -> str:
     """
     Burn styled captions into a video clip.
@@ -178,7 +187,7 @@ def burn_captions(
         out_path = base + "_captioned.mp4"
 
     # Write ASS file
-    ass_content = make_ass(caption_text, audio_duration, style)
+    ass_content = make_ass(caption_text, audio_duration, style, width=width, height=height)
     ass_file = video_path + ".captions.ass"
     with open(ass_file, "w", encoding="utf-8") as f:
         f.write(ass_content)
@@ -328,15 +337,14 @@ def parse_caption_edit(edited_text: str, original_timestamps: list) -> list:
         # More edited words — distribute evenly within each orig word's time slot
         ratio = n_edit / n_orig
         for i, ew in enumerate(edited_words):
-            o_idx  = min(int(i / ratio), n_orig - 1)
-            o_next = min(o_idx + 1, n_orig - 1)
+            o_idx      = min(int(i / ratio), n_orig - 1)
             slot_start = orig[o_idx]["start"]
             slot_end   = orig[o_idx]["end"]
             # how far into this orig word's slot?
             local_i   = i - int(o_idx * ratio)
             local_n   = max(1, int((o_idx + 1) * ratio) - int(o_idx * ratio))
             frac      = local_i / local_n
-            frac_next = (local_i + 1) / local_n
+            frac_next = min(1.0, (local_i + 1) / local_n)  # clamp — prevents end > slot_end
             result.append({
                 "word":         ew["text"],
                 "start":        slot_start + frac      * (slot_end - slot_start),
@@ -542,8 +550,8 @@ def burn_karaoke(
                 if s.get("codec_type") == "audio":
                     audio_offset = float(s.get("start_time", 0.0))
                     break
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"  [WARN] burn_karaoke: could not detect audio offset ({e}) — using 0.0")
 
     ass_content = make_karaoke_ass(words, total_duration, style_name=style,
                                    audio_offset=audio_offset,

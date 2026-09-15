@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import SceneCard from './SceneCard.jsx'
 import Timeline from './Timeline.jsx'
 import CaptionStylePicker from './CaptionStylePicker.jsx'
@@ -8,9 +8,13 @@ export default function JobReview({ job, onBack, onUpdate }) {
   const [approving, setApproving]     = useState(false)
   const [rendering, setRendering]     = useState(false)
   const [activeScene, setActiveScene] = useState(job.scenes?.[0]?.scene_id || null)
-  const sceneRefs = useRef({})
-  const locked   = job.status === 'approved' || job.status === 'done'
-  const rendered = job.status === 'done' && job.output_path
+  const sceneRefs  = useRef({})
+  const pollRef    = useRef(null)   // render poll interval — stored for cleanup
+  const locked     = job.status === 'approved' || job.status === 'done'
+  const rendered   = job.status === 'done' && job.output_path
+
+  // Clean up any lingering render poll when component unmounts
+  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current) }, [])
 
   const handleSelectScene = (sceneId) => {
     setActiveScene(sceneId)
@@ -48,15 +52,21 @@ export default function JobReview({ job, onBack, onUpdate }) {
       const res = await fetch(`/api/jobs/${job.job_id}/render`, { method: 'POST' })
       if (!res.ok) throw new Error(await res.text())
 
-      // Poll /render-status every 3 seconds until done or failed
-      const poll = setInterval(async () => {
+      // Poll /render-status every 3 seconds until done or failed; max 5 min timeout
+      let elapsed = 0
+      pollRef.current = setInterval(async () => {
+        elapsed += 3
         try {
           const sr = await fetch(`/api/jobs/${job.job_id}/render-status`)
           if (!sr.ok) return
           const data = await sr.json()
-          if (data.done || data.failed) {
-            clearInterval(poll)
+          if (data.done || data.failed || elapsed >= 300) {
+            clearInterval(pollRef.current); pollRef.current = null
             setRendering(false)
+            if (elapsed >= 300 && !data.done) {
+              alert('Render timed out — check server logs.')
+              return
+            }
             const jr = await fetch(`/api/jobs/${job.job_id}`)
             if (jr.ok) onUpdate(await jr.json())
           }

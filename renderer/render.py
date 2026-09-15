@@ -99,10 +99,13 @@ def export_platform(job: dict, platform: str) -> str:
          "-show_streams", "-select_streams", "v:0", src],
         capture_output=True, text=True
     )
-    vstream = next(
-        (s for s in json.loads(r.stdout).get("streams", []) if s.get("codec_type") == "video"),
-        {"width": 1280, "height": 720}
-    )
+    try:
+        vstream = next(
+            (s for s in json.loads(r.stdout).get("streams", []) if s.get("codec_type") == "video"),
+            {"width": 1280, "height": 720}
+        )
+    except (json.JSONDecodeError, StopIteration):
+        vstream = {"width": 1280, "height": 720}
     src_w, src_h = vstream["width"], vstream["height"]
 
     # Step 1: crop/scale to platform size (no captions yet)
@@ -238,9 +241,12 @@ def _get_audio_duration(path: str) -> float:
         ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_streams", path],
         capture_output=True, text=True,
     )
-    for s in json.loads(r.stdout).get("streams", []):
-        if s.get("codec_type") == "audio" and "duration" in s:
-            return float(s["duration"])
+    try:
+        for s in json.loads(r.stdout).get("streams", []):
+            if s.get("codec_type") == "audio" and "duration" in s:
+                return float(s["duration"])
+    except (json.JSONDecodeError, ValueError, KeyError):
+        pass
     return 5.0
 
 
@@ -358,10 +364,12 @@ def _render_ffmpeg(job: dict, caption_style: str = None) -> str:
         with open(concat_file, "w") as f:
             for sf in composed_files:
                 f.write(f"file '{os.path.abspath(sf).replace(chr(92),'/')}'\n")
-        subprocess.run(
+        r_nocap = subprocess.run(
             ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", concat_file, "-c", "copy", nocap_output],
             capture_output=True, text=True
         )
+        if r_nocap.returncode != 0:
+            print(f"  [WARN] nocap concat failed (code {r_nocap.returncode}) — platform exports will use captioned master")
 
     # Concat captioned scenes → final output.mp4
     concat_file = os.path.join(job_dir, "concat.txt")

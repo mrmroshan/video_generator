@@ -339,14 +339,15 @@ def get_caption_text(job_id: str, scene_id: str):
             lines.append(" ".join(current))
         text = "\n".join(lines)
     else:
-        # Fallback: use voiceover text as single line
-        text = scene.get("voiceover_text", "")
+        # Fallback: use voiceover text as single line (no timestamps — timing will be approximate)
+        text = scene.get("voiceover_text", "") or ""
 
     return {
-        "scene_id":   scene_id,
-        "text":       text,
-        "is_edited":  False,
-        "word_count": len(text.split()),
+        "scene_id":    scene_id,
+        "text":        text,
+        "is_edited":   False,
+        "has_timestamps": bool(ts),
+        "word_count":  len(text.split()),
     }
 
 
@@ -401,7 +402,7 @@ def recaption_scene(job_id: str, scene_id: str, payload: CaptionTextPayload):
          "-show_streams", "-select_streams", "v:0", composed],
         capture_output=True, text=True
     )
-    vst = next((s for s in __import__("json").loads(r.stdout).get("streams", [])
+    vst = next((s for s in json.loads(r.stdout).get("streams", [])
                 if s.get("codec_type") == "video"), {})
     width  = vst.get("width",  1280)
     height = vst.get("height", 720)
@@ -413,9 +414,12 @@ def recaption_scene(job_id: str, scene_id: str, payload: CaptionTextPayload):
                          style=caption_style, out_path=captioned,
                          audio_path=None, width=width, height=height)
         else:
+            # No timestamps or non-karaoke — burn static captions
+            from renderer.captions import STYLES as _STYLES
+            static_style = caption_style if caption_style in _STYLES else "clean"
             burn_captions(composed, text, audio_dur,
-                          style=caption_style.replace("karaoke", "clean") if use_karaoke else caption_style,
-                          out_path=captioned)
+                          style=static_style, out_path=captioned,
+                          width=width, height=height)
         scene["captioned_path"] = captioned
     except Exception as e:
         raise HTTPException(500, f"Re-caption failed: {e}")

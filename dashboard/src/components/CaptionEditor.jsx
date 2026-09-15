@@ -13,6 +13,7 @@ export default function CaptionEditor({ scene, jobId, onUpdate }) {
   const [text, setText]           = useState('')
   const [loading, setLoading]     = useState(true)
   const [isEdited, setIsEdited]   = useState(false)
+  const [hasTs, setHasTs]         = useState(false)  // server tells us if timestamps exist
   const [dirty, setDirty]         = useState(false)
   const [saving, setSaving]       = useState(false)
   const [error, setError]         = useState(null)
@@ -30,6 +31,7 @@ export default function CaptionEditor({ scene, jobId, onUpdate }) {
       .then(data => {
         setText(data.text)
         setIsEdited(data.is_edited)
+        setHasTs(data.has_timestamps || false)
         setLoading(false)
       })
       .catch(e => {
@@ -45,7 +47,7 @@ export default function CaptionEditor({ scene, jobId, onUpdate }) {
   }
 
   const handleRecaption = async () => {
-    if (!dirty && isEdited) return  // nothing changed
+    if (!dirty) return  // nothing changed since last save or load
     setSaving(true)
     setError(null)
     setSuccess(false)
@@ -97,7 +99,6 @@ export default function CaptionEditor({ scene, jobId, onUpdate }) {
 
   const wordCount  = text.trim() ? text.trim().split(/\s+/).length : 0
   const lineCount  = text.trim() ? text.trim().split('\n').filter(l => l.trim()).length : 0
-  const hasTs      = Boolean(scene.timestamps?.length)
 
   return (
     <div className="caption-editor">
