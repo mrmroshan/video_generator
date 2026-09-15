@@ -731,12 +731,17 @@ def render_job_endpoint(job_id: str, background_tasks: BackgroundTasks):
     if job["status"] != "approved":
         raise HTTPException(409, f"Job must be approved before rendering (status={job['status']})")
 
+    # Snapshot the approved job BEFORE setting status=rendering.
+    # render_job() checks status=="approved" internally — passing the snapshot
+    # avoids the race where the background task loads "rendering" and rejects itself.
+    approved_snapshot        = dict(job)
+    approved_snapshot["status"] = "approved"  # ensure snapshot stays approved for render_job check
+
     update_status(job_id, "rendering")
 
-    def _do_render(job_id: str):
+    def _do_render(job_id: str, job_snapshot: dict):
         try:
-            job = load_job(job_id)
-            output_path = render_job(job)
+            output_path = render_job(job_snapshot)
             update_status(job_id, "done", {"output_path": output_path})
         except Exception as e:
             print(f"[ERROR] Render failed for {job_id}: {e}")
@@ -745,7 +750,7 @@ def render_job_endpoint(job_id: str, background_tasks: BackgroundTasks):
             except Exception:
                 pass
 
-    background_tasks.add_task(_do_render, job_id)
+    background_tasks.add_task(_do_render, job_id, approved_snapshot)
     return {
         "status": "rendering",
         "job_id": job_id,
