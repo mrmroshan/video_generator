@@ -401,7 +401,14 @@ def make_karaoke_ass(
 
     # Extend each word's display to the next word's start (covers gaps/pauses)
     # MAX_HOLD caps the bridge so captions don't visually freeze during long silences
-    MAX_HOLD = 0.35  # seconds — beyond this, drop caption and let next phrase fade in fresh
+    MAX_HOLD     = 0.35  # seconds — beyond this, drop caption and let next phrase fade in fresh
+    MIN_WORD_DUR = 0.20  # minimum time a word stays on screen — prevents flash for short words
+
+    # First pass: enforce minimum word display duration
+    for w in adj:
+        if w["end"] - w["start"] < MIN_WORD_DUR:
+            w["end"] = w["start"] + MIN_WORD_DUR
+
     for i in range(len(adj) - 1):
         gap = adj[i + 1]["start"] - adj[i]["end"]
         if gap <= MAX_HOLD:

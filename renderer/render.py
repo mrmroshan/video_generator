@@ -355,7 +355,10 @@ def _render_ffmpeg(job: dict, caption_style: str = None) -> str:
     if not scene_files:
         raise RuntimeError("No scenes rendered successfully")
 
-    # Concat all scenes → caption-free master (used by export_platform for per-platform captions)
+    # Concat all scenes → caption-free master
+    # IMPORTANT: use -reset_timestamps 1 so each scene's PTS is re-based from 0
+    # before joining. Without this, broll clips that started mid-stream carry
+    # their original PTS into the concat and cause multi-second freeze gaps.
     nocap_output = os.path.join(job_dir, "output_nocap.mp4")
     concat_file  = os.path.join(job_dir, "concat_nocap.txt")
     composed_files = [scene["composed_path"] for scene in job["scenes"]
@@ -364,10 +367,25 @@ def _render_ffmpeg(job: dict, caption_style: str = None) -> str:
         with open(concat_file, "w") as f:
             for sf in composed_files:
                 f.write(f"file '{os.path.abspath(sf).replace(chr(92),'/')}'\n")
+                f.write("duration 0\n")  # hint to concat demuxer; actual dur read from file
         r_nocap = subprocess.run(
-            ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", concat_file, "-c", "copy", nocap_output],
+            ["ffmpeg", "-y",
+             "-f", "concat", "-safe", "0", "-segment_time_metadata", "1",
+             "-i", concat_file,
+             "-vf", "setpts=N/FRAME_RATE/TB",
+             "-af", "aselect=1,asetpts=N/SR/TB",
+             "-c:v", "libx264", "-profile:v", "baseline", "-level", "3.1",
+             "-preset", "fast", "-crf", "22",
+             "-c:a", "aac", "-b:a", "128k",
+             nocap_output],
             capture_output=True, text=True
         )
+        if r_nocap.returncode != 0:
+            # Fallback: plain copy (may have freeze if PTS mismatch)
+            r_nocap = subprocess.run(
+                ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", concat_file, "-c", "copy", nocap_output],
+                capture_output=True, text=True
+            )
         if r_nocap.returncode != 0:
             print(f"  [WARN] nocap concat failed (code {r_nocap.returncode}) — platform exports will use captioned master")
 
@@ -379,7 +397,15 @@ def _render_ffmpeg(job: dict, caption_style: str = None) -> str:
 
     print(f"  Concatenating {len(scene_files)} scenes...", end=" ", flush=True)
     r = subprocess.run(
-        ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", concat_file, "-c", "copy", output],
+        ["ffmpeg", "-y",
+         "-f", "concat", "-safe", "0",
+         "-i", concat_file,
+         "-vf", "setpts=N/FRAME_RATE/TB",
+         "-af", "aselect=1,asetpts=N/SR/TB",
+         "-c:v", "libx264", "-profile:v", "baseline", "-level", "3.1",
+         "-preset", "fast", "-crf", "22",
+         "-c:a", "aac", "-b:a", "128k",
+         output],
         capture_output=True, text=True,
     )
     if r.returncode != 0:

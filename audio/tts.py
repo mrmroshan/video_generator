@@ -95,9 +95,9 @@ def _call_elevenlabs(text: str, output_path: str, voice_id: str, api_key: str):
         "text": text,
         "model_id": DEFAULT_MODEL,
         "voice_settings": {
-            "stability": 0.5,
+            "stability": 0.65,          # higher = slower, more consistent pacing (was 0.5)
             "similarity_boost": 0.75,
-            "style": 0.0,
+            "style": 0.15,              # slight style keeps warmth without rushing
             "use_speaker_boost": True,
         }
     }).encode("utf-8")
