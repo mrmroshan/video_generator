@@ -192,3 +192,47 @@ def test_job_progress_endpoint(client, tmp_db):
     assert data["progress_phase"] == "generating_script"
     assert data["ready"] == False
     assert data["failed"] == False
+
+
+# ── Platform validation tests ─────────────────────────────────────────────────
+
+def test_topics_unknown_platform_rejected(client):
+    """POST /topics with unknown platform returns 422."""
+    res = client.post("/topics", json={"niche": "finance", "platform": "snapchat"})
+    assert res.status_code == 422
+
+
+def test_topics_all_four_platforms_accepted(client):
+    """All 4 platforms (youtube, tiktok, instagram, facebook) are accepted by /topics."""
+    for platform in ["youtube", "tiktok", "instagram", "facebook"]:
+        res = client.post("/topics", json={"niche": "finance", "platform": platform})
+        assert res.status_code == 200, f"Platform '{platform}' was rejected: {res.text}"
+        assert len(res.json()["topics"]) == 8
+
+
+def test_create_job_unknown_platform_rejected(client):
+    """POST /jobs/create with unknown platform returns 422."""
+    res = client.post("/jobs/create", json={
+        "niche": "finance", "topic_title": "test", "platform": "snapchat"
+    })
+    assert res.status_code == 422
+
+
+def test_create_job_instagram_platform_accepted(client):
+    """POST /jobs/create with platform=instagram returns a job_id."""
+    res = client.post("/jobs/create", json={
+        "niche": "finance", "topic_title": "Instagram test topic",
+        "platform": "instagram"
+    })
+    assert res.status_code == 200
+    assert "job_id" in res.json()
+
+
+def test_create_job_facebook_platform_accepted(client):
+    """POST /jobs/create with platform=facebook returns a job_id."""
+    res = client.post("/jobs/create", json={
+        "niche": "marketing", "topic_title": "Facebook test topic",
+        "platform": "facebook"
+    })
+    assert res.status_code == 200
+    assert "job_id" in res.json()

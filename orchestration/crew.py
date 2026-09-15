@@ -130,8 +130,10 @@ Output this exact JSON structure:
 }}"""
 
 PLATFORM_RULES = {
-    "tiktok": "TikTok style — fast hook in scene_01 (≤4s), punchy lines, each scene ≤6s, total ≤30s",
-    "youtube": "YouTube style — engaging narrative, build curiosity, each scene 5-10s, total 45-90s",
+    "tiktok":    "TikTok style — fast hook in scene_01 (≤4s), punchy lines, each scene ≤6s, total ≤30s",
+    "youtube":   "YouTube style — engaging narrative, build curiosity, each scene 5-10s, total 45-90s",
+    "instagram": "Instagram Reels/Feed style — strong visual hook, concise scenes 5-8s, total 30-60s, square-friendly framing",
+    "facebook":  "Facebook video style — engaging hook, accessible language, scenes 6-10s, total 45-90s, auto-play-friendly",
 }
 
 

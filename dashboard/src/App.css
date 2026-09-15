@@ -628,18 +628,18 @@ body {
 
 /* ── Platform toggle ─────────────────────────────────────── */
 .platform-toggle {
-  display: flex; gap: 10px; margin: 8px 0 0;
+  display: flex; gap: 8px; margin: 8px 0 0; flex-wrap: wrap; justify-content: center;
 }
 .platform-btn {
   display: flex; flex-direction: column; align-items: center; gap: 2px;
   background: #13131c; border: 2px solid #2a2a40; border-radius: 10px;
-  padding: 10px 20px; cursor: pointer; transition: border-color .15s, background .15s;
-  min-width: 110px;
+  padding: 8px 14px; cursor: pointer; transition: border-color .15s, background .15s;
+  min-width: 90px; flex: 0 0 auto;
 }
 .platform-btn.active { border-color: #6366f1; background: #1a1a2e; }
 .platform-btn:hover   { border-color: #6366f1; }
-.platform-icon  { font-size: 20px; }
-.platform-label { font-size: 13px; font-weight: 700; color: #e2e2ee; }
+.platform-icon  { font-size: 18px; }
+.platform-label { font-size: 12px; font-weight: 700; color: #e2e2ee; }
 .platform-desc  { font-size: 10px; color: #555; }
 
 /* ── Niche grid ──────────────────────────────────────────── */

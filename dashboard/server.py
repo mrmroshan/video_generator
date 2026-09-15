@@ -58,6 +58,9 @@ def get_niches():
     return {"niches": NICHES}
 
 
+VALID_PLATFORMS = {"youtube", "tiktok", "instagram", "facebook"}
+
+
 class TopicsPayload(BaseModel):
     niche:    str
     platform: str = "youtube"
@@ -65,10 +68,13 @@ class TopicsPayload(BaseModel):
 
 @app.post("/topics")
 def get_topics(payload: TopicsPayload):
-    """Generate 8 trending topic ideas for a niche. Returns immediately with job_id for polling."""
+    """Generate 8 trending topic ideas for a niche."""
     from orchestration.crew import NICHES
     if payload.niche not in NICHES:
         raise HTTPException(422, f"Unknown niche '{payload.niche}'. Choose from: {sorted(NICHES)}")
+    platform = payload.platform.lower().strip()
+    if platform not in VALID_PLATFORMS:
+        raise HTTPException(422, f"Unknown platform '{payload.platform}'. Choose from: {sorted(VALID_PLATFORMS)}")
 
     from orchestration.crew import generate_topic_ideas
     # Call synchronously — topic gen is fast (Claude or mock)
@@ -98,6 +104,9 @@ def create_job(payload: CreateJobPayload, background_tasks: BackgroundTasks):
         raise HTTPException(422, f"Unknown niche '{payload.niche}'")
     if not payload.topic_title.strip():
         raise HTTPException(422, "topic_title cannot be empty")
+    platform = payload.platform.lower().strip()
+    if platform not in VALID_PLATFORMS:
+        raise HTTPException(422, f"Unknown platform '{payload.platform}'. Choose from: {sorted(VALID_PLATFORMS)}")
 
     # Pre-create the job record so the UI can poll immediately
     import uuid
