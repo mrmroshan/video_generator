@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import BrollPicker from './BrollPicker.jsx'
+import CaptionEditor from './CaptionEditor.jsx'
 
 export default function SceneCard({ scene, sceneIndex, jobId, jobStatus, onUpdate }) {
   const [caption, setCaption]         = useState(scene.voiceover_text)
@@ -138,6 +139,15 @@ export default function SceneCard({ scene, sceneIndex, jobId, jobStatus, onUpdat
                 <div className="field-label">🔊 Audio preview</div>
                 <audio className="audio-player" controls src={audioSrc} />
               </div>
+            )}
+
+            {/* Caption editor — shown when timestamps exist (after first render) */}
+            {scene.timestamps?.length > 0 && (
+              <CaptionEditor
+                scene={scene}
+                jobId={jobId}
+                onUpdate={onUpdate}
+              />
             )}
 
             {editing && !locked && (

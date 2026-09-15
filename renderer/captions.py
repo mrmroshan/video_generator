@@ -260,6 +260,93 @@ KARAOKE_STYLES = {
 }
 
 
+def parse_caption_edit(edited_text: str, original_timestamps: list) -> list:
+    """
+    Merge user-edited caption text back into the Whisper timestamp list.
+
+    The user edits a textarea where:
+      - Each LINE = one phrase group (displayed together on screen)
+      - Words within a line = karaoke-highlighted one by one
+      - Newline = explicit phrase break
+
+    Strategy:
+      1. Tokenise the edited text into words (preserving newlines as phrase breaks)
+      2. Match edited words to original timestamps positionally
+         - If edited word count matches: 1-to-1 mapping
+         - If edited has more words (user split a word): interpolate timing
+         - If edited has fewer words (user merged): extend timing of merged word
+      3. Return a new timestamps list with updated 'word' text and phrase_break flags
+
+    The returned list is compatible with make_karaoke_ass() — each entry has:
+      {"word": str, "start": float, "end": float, "phrase_break": bool}
+    """
+    if not original_timestamps:
+        return []
+
+    # Parse edited text: split into lines, each line into words
+    lines = edited_text.strip().splitlines()
+    edited_words = []  # list of (word_text, is_phrase_break_before)
+    for li, line in enumerate(lines):
+        words = line.strip().split()
+        for wi, w in enumerate(words):
+            phrase_break = (li > 0 and wi == 0)  # first word of every line after the first
+            edited_words.append({"text": w, "phrase_break": phrase_break})
+
+    if not edited_words:
+        return original_timestamps
+
+    orig = original_timestamps
+    n_orig = len(orig)
+    n_edit = len(edited_words)
+
+    result = []
+
+    if n_edit == n_orig:
+        # Perfect 1-to-1 mapping — just replace text
+        for i, ew in enumerate(edited_words):
+            result.append({
+                "word":         ew["text"],
+                "start":        orig[i]["start"],
+                "end":          orig[i]["end"],
+                "phrase_break": ew["phrase_break"],
+            })
+
+    elif n_edit < n_orig:
+        # Fewer edited words — distribute orig timestamps evenly across edited words
+        ratio = n_orig / n_edit
+        for i, ew in enumerate(edited_words):
+            o_start = int(i * ratio)
+            o_end   = min(int((i + 1) * ratio) - 1, n_orig - 1)
+            result.append({
+                "word":         ew["text"],
+                "start":        orig[o_start]["start"],
+                "end":          orig[o_end]["end"],
+                "phrase_break": ew["phrase_break"],
+            })
+
+    else:
+        # More edited words — distribute evenly within each orig word's time slot
+        ratio = n_edit / n_orig
+        for i, ew in enumerate(edited_words):
+            o_idx  = min(int(i / ratio), n_orig - 1)
+            o_next = min(o_idx + 1, n_orig - 1)
+            slot_start = orig[o_idx]["start"]
+            slot_end   = orig[o_idx]["end"]
+            # how far into this orig word's slot?
+            local_i   = i - int(o_idx * ratio)
+            local_n   = max(1, int((o_idx + 1) * ratio) - int(o_idx * ratio))
+            frac      = local_i / local_n
+            frac_next = (local_i + 1) / local_n
+            result.append({
+                "word":         ew["text"],
+                "start":        slot_start + frac      * (slot_end - slot_start),
+                "end":          slot_start + frac_next * (slot_end - slot_start),
+                "phrase_break": ew["phrase_break"],
+            })
+
+    return result
+
+
 def make_karaoke_ass(
     words: list,
     total_duration: float,
@@ -316,19 +403,35 @@ def make_karaoke_ass(
     adj[-1]["disp_end"] = min(total_duration, adj[-1]["end"] + 1.2)  # hold last word
 
     # ── Split words into phrase groups ────────────────────────────────
-    phrases = []
-    current = []
-    char_count = 0
-    for w in adj:
-        if char_count + len(w["word"]) + 1 > line_max_chars and current:
+    # If any word has phrase_break=True (set by caption editor), use those as group boundaries.
+    # Otherwise fall back to automatic char-count grouping.
+    has_explicit_breaks = any(w.get("phrase_break") for w in adj)
+
+    if has_explicit_breaks:
+        phrases  = []
+        current  = []
+        for w in adj:
+            if w.get("phrase_break") and current:
+                phrases.append(current)
+                current = [w]
+            else:
+                current.append(w)
+        if current:
             phrases.append(current)
-            current = [w]
-            char_count = len(w["word"])
-        else:
-            current.append(w)
-            char_count += len(w["word"]) + 1
-    if current:
-        phrases.append(current)
+    else:
+        phrases    = []
+        current    = []
+        char_count = 0
+        for w in adj:
+            if char_count + len(w["word"]) + 1 > line_max_chars and current:
+                phrases.append(current)
+                current    = [w]
+                char_count = len(w["word"])
+            else:
+                current.append(w)
+                char_count += len(w["word"]) + 1
+        if current:
+            phrases.append(current)
 
     # Extend last word of each phrase to reach next phrase's first word
     # (only if the gap is small — otherwise the last word holds for MAX_HOLD already)

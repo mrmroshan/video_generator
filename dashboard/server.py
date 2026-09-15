@@ -286,6 +286,144 @@ def swap_broll(job_id: str, scene_id: str):
     return job
 
 
+# ── Caption text editor ───────────────────────────────────────────────
+
+@app.get("/jobs/{job_id}/scenes/{scene_id}/caption-text")
+def get_caption_text(job_id: str, scene_id: str):
+    """
+    Return the caption text for a scene in an editable format.
+    Each LINE = one phrase group (will appear on screen together).
+    Words within a line = karaoke-highlighted one by one.
+    Returns the current edited text if saved, or auto-generates from timestamps.
+    """
+    job = load_job(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    scene = next((s for s in job.get("scenes", []) if s["scene_id"] == scene_id), None)
+    if not scene:
+        raise HTTPException(404, "Scene not found")
+
+    # If already edited, return saved text
+    if scene.get("caption_text_edited"):
+        return {
+            "scene_id":    scene_id,
+            "text":        scene["caption_text_edited"],
+            "is_edited":   True,
+            "word_count":  len(scene["caption_text_edited"].split()),
+        }
+
+    # Auto-generate from timestamps: group into lines by phrase
+    ts = scene.get("timestamps", [])
+    if ts:
+        from renderer.captions import KARAOKE_STYLES
+        # Use same line_max_chars logic as make_karaoke_ass to show accurate preview
+        line_max = 32
+        lines, current, char_count = [], [], 0
+        for w in ts:
+            word = w.get("word", "").strip()
+            if not word:
+                continue
+            # Honour existing phrase_break flags
+            if w.get("phrase_break") and current:
+                lines.append(" ".join(current))
+                current = [word]
+                char_count = len(word)
+            elif char_count + len(word) + 1 > line_max and current:
+                lines.append(" ".join(current))
+                current = [word]
+                char_count = len(word)
+            else:
+                current.append(word)
+                char_count += len(word) + 1
+        if current:
+            lines.append(" ".join(current))
+        text = "\n".join(lines)
+    else:
+        # Fallback: use voiceover text as single line
+        text = scene.get("voiceover_text", "")
+
+    return {
+        "scene_id":   scene_id,
+        "text":       text,
+        "is_edited":  False,
+        "word_count": len(text.split()),
+    }
+
+
+class CaptionTextPayload(BaseModel):
+    text: str  # multiline — newlines = phrase breaks
+
+
+@app.post("/jobs/{job_id}/scenes/{scene_id}/recaption")
+def recaption_scene(job_id: str, scene_id: str, payload: CaptionTextPayload):
+    """
+    Save edited caption text and re-burn captions for this scene only.
+    - Parses edited text → merges with Whisper timestamps (preserving timing)
+    - Re-burns the captioned video for this scene
+    - Does NOT require a full re-render
+    Returns updated job.
+    """
+    import subprocess as _sp
+    from renderer.captions import parse_caption_edit, burn_karaoke, burn_captions
+    from renderer.render import JOBS_DIR, _get_audio_duration
+
+    job = load_job(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    scene = next((s for s in job.get("scenes", []) if s["scene_id"] == scene_id), None)
+    if not scene:
+        raise HTTPException(404, "Scene not found")
+
+    composed = scene.get("composed_path", "")
+    if not composed or not os.path.exists(composed):
+        raise HTTPException(409, f"Scene {scene_id} has no composed video yet — render first")
+
+    text = payload.text.strip()
+    if not text:
+        raise HTTPException(422, "Caption text cannot be empty")
+
+    # Save the edited text on the scene
+    scene["caption_text_edited"] = text
+
+    # Merge edited text into timestamps
+    original_ts = scene.get("timestamps", [])
+    new_ts = parse_caption_edit(text, original_ts)
+    scene["timestamps"] = new_ts
+
+    # Re-burn captions for this scene only
+    caption_style = job.get("caption_style", "karaoke")
+    use_karaoke   = caption_style.startswith("karaoke") and bool(new_ts)
+    audio_dur     = _get_audio_duration(scene.get("audio_path") or composed)
+
+    # Probe video dimensions
+    r = _sp.run(
+        ["ffprobe", "-v", "quiet", "-print_format", "json",
+         "-show_streams", "-select_streams", "v:0", composed],
+        capture_output=True, text=True
+    )
+    vst = next((s for s in __import__("json").loads(r.stdout).get("streams", [])
+                if s.get("codec_type") == "video"), {})
+    width  = vst.get("width",  1280)
+    height = vst.get("height", 720)
+
+    captioned = composed.replace("_composed.mp4", "_captioned.mp4")
+    try:
+        if use_karaoke:
+            burn_karaoke(composed, new_ts, audio_dur,
+                         style=caption_style, out_path=captioned,
+                         audio_path=None, width=width, height=height)
+        else:
+            burn_captions(composed, text, audio_dur,
+                          style=caption_style.replace("karaoke", "clean") if use_karaoke else caption_style,
+                          out_path=captioned)
+        scene["captioned_path"] = captioned
+    except Exception as e:
+        raise HTTPException(500, f"Re-caption failed: {e}")
+
+    save_job(job)
+    return job
+
+
 # ── Caption style ─────────────────────────────────────────────────────
 
 @app.get("/caption-styles")

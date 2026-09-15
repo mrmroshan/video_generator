@@ -318,6 +318,57 @@ body {
 
 .audio-player { width: 100%; }
 
+/* ── Caption Editor ───────────────────────────────────────────────── */
+.caption-editor {
+  display: flex; flex-direction: column; gap: 6px;
+  background: #0f0f1a; border: 1px solid #2a2a40;
+  border-radius: 8px; padding: 12px;
+}
+.caption-editor-header {
+  display: flex; align-items: center; justify-content: space-between;
+}
+.caption-editor-title { font-size: 12px; font-weight: 600; color: #c7d2fe; }
+.caption-editor-meta  { display: flex; gap: 6px; align-items: center; }
+.ce-badge {
+  font-size: 10px; padding: 2px 7px; border-radius: 10px; font-weight: 600;
+}
+.ce-badge-edited { background: #1a2e1a; color: #4caf6e; }
+.ce-badge-dirty  { background: #2a1f00; color: #f4b942; }
+.ce-badge-warn   { background: #2a1a00; color: #f08040; }
+.caption-editor-hint {
+  font-size: 10px; color: #555; line-height: 1.4;
+}
+.ce-textarea {
+  width: 100%; box-sizing: border-box;
+  background: #13131c; border: 1px solid #2a2a40; border-radius: 6px;
+  color: #e2e2ee; font-family: 'Courier New', monospace; font-size: 13px;
+  line-height: 1.8; padding: 8px 10px; resize: vertical;
+  outline: none; transition: border-color .15s;
+}
+.ce-textarea:focus  { border-color: #6366f1; }
+.ce-textarea:disabled { opacity: .5; }
+.caption-editor-footer {
+  display: flex; align-items: center; justify-content: space-between;
+}
+.ce-stats   { font-size: 10px; color: #444; }
+.ce-actions { display: flex; gap: 6px; }
+.btn-ce-reset {
+  background: none; border: 1px solid #333; color: #666;
+  padding: 5px 10px; border-radius: 6px; font-size: 11px; cursor: pointer;
+  transition: border-color .15s, color .15s;
+}
+.btn-ce-reset:hover { border-color: #6366f1; color: #c7d2fe; }
+.btn-ce-recaption {
+  background: #6366f1; border: none; color: #fff;
+  padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: background .15s;
+}
+.btn-ce-recaption:hover    { background: #7c7ff5; }
+.btn-ce-recaption:disabled { background: #2a2a40; color: #555; cursor: not-allowed; }
+.ce-loading { font-size: 12px; color: #555; padding: 4px 0; }
+.ce-error   { font-size: 11px; color: #f08080; background: #2a0f0f; padding: 6px 8px; border-radius: 5px; }
+.ce-success { font-size: 11px; color: #4caf6e; background: #0f2a14; padding: 6px 8px; border-radius: 5px; }
+
 .caption-actions { display: flex; gap: 8px; }
 .btn-save {
   background: #6366f1; border: none; color: #fff;
