@@ -24,17 +24,34 @@ def test_make_karaoke_ass_whitespace_words_no_crash():
 
 
 def test_make_karaoke_ass_gap_coverage():
-    """Word display extends to next word start (no blank during speech pause)."""
+    """Gaps <= MAX_HOLD bridge to next word; gaps > MAX_HOLD release early (no freeze)."""
     import re
-    words = [
+    MAX_HOLD = 0.35
+
+    # Short gap (0.26s) — should bridge to next word start
+    words_short = [
+        {"word": "here.", "start": 1.04, "end": 1.30},
+        {"word": "You",   "start": 1.56, "end": 1.70},
+    ]
+    ass = make_karaoke_ass(words_short, 5.0, audio_offset=0.0)
+    lines = [l for l in ass.splitlines() if l.startswith("Dialogue:")]
+    here = next(l for l in lines if re.search(r'\}here\.\{', l))
+    end_time = here.split(",")[2]
+    assert end_time == "0:00:01.56", f"Short gap should bridge: expected 0:00:01.56, got {end_time}"
+
+    # Long gap (0.40s > MAX_HOLD) — should release at word_end + MAX_HOLD, not freeze
+    words_long = [
         {"word": "here.", "start": 1.04, "end": 1.30},
         {"word": "You",   "start": 1.70, "end": 1.82},
     ]
-    ass = make_karaoke_ass(words, 5.0, audio_offset=0.0)
+    ass = make_karaoke_ass(words_long, 5.0, audio_offset=0.0)
     lines = [l for l in ass.splitlines() if l.startswith("Dialogue:")]
-    here_active = next(l for l in lines if re.search(r'\}here\.\{', l))
-    end_time = here_active.split(",")[2]
-    assert end_time == "0:00:01.70", f"Expected 0:00:01.70, got {end_time}"
+    here = next(l for l in lines if re.search(r'\}here\.\{', l))
+    end_time = here.split(",")[2]
+    expected = f"0:00:01.{int((1.30 + MAX_HOLD) * 100) % 100:02d}"
+    # disp_end = 1.30 + 0.35 = 1.65
+    assert end_time == "0:00:01.65", f"Long gap should cap: expected 0:00:01.65, got {end_time}"
+    assert end_time != "0:00:01.70", "Caption must NOT bridge full gap — that causes the freeze bug"
 
 
 def test_all_static_styles_produce_valid_ass():
