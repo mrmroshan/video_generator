@@ -28,10 +28,14 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 from contextlib import asynccontextmanager
 
-from data.db import init_db, list_jobs, load_job, save_job, update_status, update_progress
+from data.db import (
+    init_db, list_jobs, load_job, save_job, update_status, update_progress,
+    create_project, load_project, list_projects, delete_project,
+    add_topics, list_topics, update_topic_status, delete_topic, get_project_stats,
+)
 from assets.stock import _search_pexels, _download_video
 
 
@@ -890,3 +894,211 @@ def stream_broll(job_id: str, scene_id: str):
     if not os.path.exists(path):
         raise HTTPException(404, f"B-roll file missing: {path}")
     return FileResponse(path, media_type="video/mp4")
+
+
+# ── Projects ──────────────────────────────────────────────────────────
+
+
+class CreateProjectPayload(BaseModel):
+    name:        str
+    niche:       str
+    description: str = ""
+    platforms:   List[str] = ["tiktok", "instagram", "youtube", "facebook"]
+
+
+class GenerateTopicsPayload(BaseModel):
+    count:    int = 20    # topics to generate this batch (max 40 per call)
+    platform: str = "tiktok"
+
+
+class TopicStatusPayload(BaseModel):
+    status: str           # queued | in_progress | published | archived
+    job_id: Optional[str] = None
+
+
+@app.get("/projects")
+def get_projects():
+    """List all content projects with topic stats."""
+    projects = list_projects()
+    result = []
+    for p in projects:
+        stats = get_project_stats(p["project_id"])
+        result.append({**p, "stats": stats})
+    return result
+
+
+@app.post("/projects")
+def create_project_endpoint(payload: CreateProjectPayload):
+    """Create a new content project."""
+    from orchestration.crew import NICHES
+    if payload.niche not in NICHES:
+        raise HTTPException(422, f"Unknown niche '{payload.niche}'. Choose from: {sorted(NICHES)}")
+    if not payload.name.strip():
+        raise HTTPException(422, "Project name cannot be empty")
+    VALID_PLATFORMS = {"youtube", "tiktok", "instagram", "facebook"}
+    bad = [p for p in payload.platforms if p not in VALID_PLATFORMS]
+    if bad:
+        raise HTTPException(422, f"Unknown platform(s): {bad}")
+    project = create_project(
+        name=payload.name,
+        niche=payload.niche,
+        description=payload.description,
+        platforms=payload.platforms,
+    )
+    return {**project, "stats": get_project_stats(project["project_id"])}
+
+
+@app.get("/projects/{project_id}")
+def get_project(project_id: str):
+    """Get a single project with stats."""
+    project = load_project(project_id)
+    if not project:
+        raise HTTPException(404, f"Project not found: {project_id}")
+    stats = get_project_stats(project_id)
+    return {**project, "stats": stats}
+
+
+@app.delete("/projects/{project_id}")
+def delete_project_endpoint(project_id: str):
+    """Delete a project and all its topics."""
+    project = load_project(project_id)
+    if not project:
+        raise HTTPException(404, f"Project not found: {project_id}")
+    delete_project(project_id)
+    return {"deleted": project_id}
+
+
+@app.get("/projects/{project_id}/topics")
+def get_topics(project_id: str, status: str = None):
+    """List topics for a project. Optional ?status= filter."""
+    project = load_project(project_id)
+    if not project:
+        raise HTTPException(404, f"Project not found: {project_id}")
+    from data.db import TOPIC_STATUSES
+    if status and status not in TOPIC_STATUSES:
+        raise HTTPException(422, f"Unknown status '{status}'. Choose from: {sorted(TOPIC_STATUSES)}")
+    topics = list_topics(project_id, status=status)
+    stats  = get_project_stats(project_id)
+    return {"project": project, "topics": topics, "stats": stats}
+
+
+@app.post("/projects/{project_id}/topics/generate")
+def generate_topics_endpoint(project_id: str, payload: GenerateTopicsPayload,
+                              background_tasks: BackgroundTasks):
+    """
+    Trigger async batch topic generation via Claude.
+    Returns immediately — poll GET /projects/{id}/topics to see new topics appear.
+    Max 40 per call; call multiple times to build a large bank.
+    """
+    project = load_project(project_id)
+    if not project:
+        raise HTTPException(404, f"Project not found: {project_id}")
+    count = max(1, min(40, payload.count))  # cap at 40 per call
+
+    def _generate(project_id: str, niche: str, count: int, platform: str):
+        from orchestration.crew import generate_topics_batch
+        try:
+            # Pass existing titles so Claude avoids duplicates
+            existing = [t["title"] for t in list_topics(project_id)]
+            new_topics = generate_topics_batch(
+                niche=niche, count=count,
+                existing_titles=existing, platform=platform,
+            )
+            if new_topics:
+                add_topics(project_id, new_topics)
+                print(f"[TOPICS] Added {len(new_topics)} topics to project {project_id}")
+        except Exception as e:
+            print(f"[TOPICS ERROR] {project_id}: {e}")
+
+    background_tasks.add_task(
+        _generate, project_id, project["niche"], count, payload.platform
+    )
+    return {
+        "status":     "generating",
+        "project_id": project_id,
+        "requested":  count,
+        "message":    f"Generating {count} topics in background. Poll GET /projects/{project_id}/topics.",
+    }
+
+
+@app.patch("/projects/{project_id}/topics/{topic_id}")
+def update_topic(project_id: str, topic_id: str, payload: TopicStatusPayload):
+    """Update topic status: queued → in_progress → published | archived."""
+    from data.db import TOPIC_STATUSES
+    if payload.status not in TOPIC_STATUSES:
+        raise HTTPException(422, f"Invalid status '{payload.status}'. Choose from: {sorted(TOPIC_STATUSES)}")
+    updated = update_topic_status(topic_id, payload.status, payload.job_id)
+    if not updated:
+        raise HTTPException(404, f"Topic not found: {topic_id}")
+    return updated
+
+
+@app.delete("/projects/{project_id}/topics/{topic_id}")
+def delete_topic_endpoint(project_id: str, topic_id: str):
+    """Permanently delete a topic."""
+    delete_topic(topic_id)
+    return {"deleted": topic_id}
+
+
+@app.post("/projects/{project_id}/topics/{topic_id}/start-video")
+def start_video_from_topic(project_id: str, topic_id: str,
+                            background_tasks: BackgroundTasks):
+    """
+    Kick off the full video pipeline from a queued topic.
+    Marks topic as in_progress, creates a job, returns job_id.
+    """
+    project = load_project(project_id)
+    if not project:
+        raise HTTPException(404, f"Project not found: {project_id}")
+
+    topics = list_topics(project_id)
+    topic  = next((t for t in topics if t["topic_id"] == topic_id), None)
+    if not topic:
+        raise HTTPException(404, f"Topic not found: {topic_id}")
+    if topic["status"] == "published":
+        raise HTTPException(409, "Topic is already published")
+    if topic["status"] == "in_progress":
+        raise HTTPException(409, f"Topic already has a video in progress (job: {topic.get('job_id')})")
+
+    # Build a CreateJobPayload and call the same pipeline
+    class _TopicPayload:
+        topic_title   = topic["title"]
+        topic_hook    = topic.get("hook", "")
+        niche         = project["niche"]
+        platforms     = project.get("platforms", ["tiktok", "instagram", "youtube", "facebook"])
+        caption_style = "karaoke"
+
+    import uuid
+    from datetime import datetime, timezone
+    job_id = str(uuid.uuid4())
+    platforms = _TopicPayload.platforms
+    job = {
+        "job_id":          job_id,
+        "status":          "pending",
+        "platform":        platforms[0],
+        "platforms":       platforms,
+        "niche":           project["niche"],
+        "topic":           topic["title"],
+        "topic_hook":      topic.get("hook", ""),
+        "caption_style":   "karaoke",
+        "project_id":      project_id,
+        "topic_id":        topic_id,
+        "created_at":      datetime.now(timezone.utc).isoformat(),
+        "scenes":          [],
+        "progress_phase":  "queued",
+        "progress_detail": "Queued — starting now...",
+    }
+    save_job(job)
+
+    # Mark topic in_progress
+    update_topic_status(topic_id, "in_progress", job_id=job_id)
+
+    background_tasks.add_task(_run_wizard_pipeline, job_id, _TopicPayload())
+    return {
+        "job_id":     job_id,
+        "topic_id":   topic_id,
+        "project_id": project_id,
+        "status":     "pending",
+        "message":    "Pipeline started. Poll GET /jobs/{job_id}/progress",
+    }
+

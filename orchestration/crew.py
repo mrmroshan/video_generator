@@ -260,6 +260,106 @@ def generate_topic_ideas(niche: str, platform: str) -> dict:
         return _mock_topics(niche, platform)
 
 
+# Batch topic prompt — asks for exactly N unique topics, no overlaps with existing
+BATCH_TOPIC_PROMPT = """You are a viral short-form video content strategist.
+
+Generate exactly {count} unique, highly specific video topic ideas for the niche: "{niche_label}"
+
+AUDIENCE: {audience}
+TONE: {tone}
+HOOK STYLES THAT WORK FOR THIS NICHE: {hook_styles}
+
+EXISTING TOPICS TO AVOID (do not duplicate or paraphrase any of these):
+{existing_titles}
+
+Rules:
+- Output ONLY valid JSON — no markdown, no explanation, no code fences
+- Every topic must be DIFFERENT in angle, not just different words for the same idea
+- Be specific: numbers, timeframes, named concepts where possible
+- Each hook must stop the scroll in the first 3 words
+- why_trending must name a real tension or anxiety this audience has right now
+
+Output this exact JSON:
+{{
+  "topics": [
+    {{
+      "title": "...",
+      "hook": "...",
+      "why_trending": "..."
+    }}
+  ]
+}}"""
+
+
+def generate_topics_batch(niche: str, count: int = 20,
+                           existing_titles: list[str] = None,
+                           platform: str = "tiktok") -> list[dict]:
+    """
+    Generate a batch of `count` unique topic ideas for a project topic bank.
+    Avoids duplicating `existing_titles` (passed to Claude as context).
+    Returns a list of {title, hook, why_trending} dicts.
+    Falls back to mock topics if MOCK_APIS=true or Claude unavailable.
+    """
+    existing_titles = existing_titles or []
+
+    if os.getenv("MOCK_APIS", "true").lower() == "true":
+        # Mock: return shuffled curated topics, cycling if needed
+        mock_data = _mock_topics(niche, platform)
+        pool = mock_data.get("topics", [])
+        # Cycle through the pool to fill `count`
+        result = []
+        for i in range(count):
+            t = pool[i % len(pool)]
+            result.append({
+                "title":       f"{t['title']} (variant {i // len(pool) + 1})" if i >= len(pool) else t["title"],
+                "hook":        t.get("hook", ""),
+                "why_trending": t.get("why_trending", ""),
+            })
+        return result
+
+    niche_info = NICHES.get(niche, NICHES["finance"])
+    voice = NICHE_VOICE.get(niche, NICHE_VOICE["finance"])
+
+    # Format existing titles for the prompt
+    if existing_titles:
+        existing_block = "\n".join(f"- {t}" for t in existing_titles[:60])
+    else:
+        existing_block = "(none yet — this is the first batch)"
+
+    prompt = BATCH_TOPIC_PROMPT.format(
+        count=count,
+        niche_label=niche_info["label"],
+        audience=voice["audience"],
+        tone=voice["tone"],
+        hook_styles=voice["hook_styles"],
+        existing_titles=existing_block,
+    )
+
+    try:
+        raw = _call_claude(prompt)
+        data = json.loads(raw)
+        topics = data.get("topics", [])
+        if not topics:
+            raise ValueError("Empty topics list from Claude")
+        # Normalise — strip any stray 'id' fields, ensure all 3 keys present
+        return [
+            {
+                "title":        t.get("title", "").strip(),
+                "hook":         t.get("hook", "").strip(),
+                "why_trending": t.get("why_trending", "").strip(),
+            }
+            for t in topics if t.get("title", "").strip()
+        ]
+    except Exception as e:
+        print(f"[WARN] Batch topic generation failed ({e}), using mock fallback")
+        mock_data = _mock_topics(niche, platform)
+        pool = mock_data.get("topics", [])
+        return [
+            {"title": t["title"], "hook": t.get("hook", ""), "why_trending": t.get("why_trending", "")}
+            for t in pool[:count]
+        ]
+
+
 def _mock_topics(niche: str, platform: str) -> dict:
     """Curated fallback topics per niche."""
     MOCK = {

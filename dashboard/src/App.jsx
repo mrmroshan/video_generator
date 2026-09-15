@@ -4,10 +4,12 @@ import JobReview from './components/JobReview.jsx'
 import NicheWizard from './components/NicheWizard.jsx'
 import TopicPicker from './components/TopicPicker.jsx'
 import GeneratingScreen from './components/GeneratingScreen.jsx'
+import Projects from './components/Projects.jsx'
+import TopicBank from './components/TopicBank.jsx'
 import './App.css'
 
 // Wizard steps
-const STEP = { LIST: 'list', NICHE: 'niche', TOPIC: 'topic', GENERATING: 'generating', REVIEW: 'review' }
+const STEP = { LIST: 'list', NICHE: 'niche', TOPIC: 'topic', GENERATING: 'generating', REVIEW: 'review', PROJECTS: 'projects', TOPICBANK: 'topicbank' }
 
 export default function App() {
   const [jobs, setJobs]               = useState([])
@@ -15,6 +17,7 @@ export default function App() {
   const [loading, setLoading]         = useState(true)
   const [error, setError]             = useState(null)
   const [step, setStep]               = useState(STEP.LIST)
+  const [activeProject, setActiveProject] = useState(null)
 
   // Wizard state
   const [niches, setNiches]             = useState({})
@@ -129,18 +132,32 @@ export default function App() {
 
   // ── Render ───────────────────────────────────────────────────────────
   const isWizardActive = [STEP.NICHE, STEP.TOPIC, STEP.GENERATING].includes(step)
+  const isTopLevel     = [STEP.LIST, STEP.PROJECTS].includes(step)
 
   return (
     <div className="app">
       <header className="app-header">
         <div className="header-inner">
-          <span className="logo" style={{cursor:'pointer'}} onClick={handleBack}>🎬 Video Maker</span>
+          <span className="logo" style={{cursor:'pointer'}} onClick={() => setStep(STEP.LIST)}>🎬 Video Maker</span>
           <span className="subtitle">AI Video Pipeline</span>
         </div>
-        {step === STEP.LIST && (
-          <button className="btn-new-video" onClick={handleNewVideo}>
-            + New Video
-          </button>
+
+        {/* Top-level nav tabs */}
+        {isTopLevel && (
+          <nav className="header-tabs">
+            <button
+              className={`header-tab${step === STEP.LIST ? ' active' : ''}`}
+              onClick={() => setStep(STEP.LIST)}
+            >Videos</button>
+            <button
+              className={`header-tab${step === STEP.PROJECTS ? ' active' : ''}`}
+              onClick={() => setStep(STEP.PROJECTS)}
+            >Projects</button>
+          </nav>
+        )}
+
+        {isTopLevel && step === STEP.LIST && (
+          <button className="btn-new-video" onClick={handleNewVideo}>+ New Video</button>
         )}
         {isWizardActive && (
           <button className="btn-new-video" style={{ background: 'none', border: '1px solid #333', color: '#888' }}
@@ -202,6 +219,26 @@ export default function App() {
             job={selectedJob}
             onBack={handleBack}
             onUpdate={setSelectedJob}
+          />
+        )}
+
+        {step === STEP.PROJECTS && (
+          <Projects
+            onOpenProject={(project) => {
+              setActiveProject(project)
+              setStep(STEP.TOPICBANK)
+            }}
+          />
+        )}
+
+        {step === STEP.TOPICBANK && activeProject && (
+          <TopicBank
+            project={activeProject}
+            onBack={() => setStep(STEP.PROJECTS)}
+            onStartVideo={(jobId, topic) => {
+              // Navigate to job list so user can monitor/review the new job
+              setStep(STEP.LIST)
+            }}
           />
         )}
       </main>
