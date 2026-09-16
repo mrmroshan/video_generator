@@ -127,7 +127,15 @@ WRITING RULES:
 - Short sentences. Punchy rhythm. No corporate speak.
 - Every sentence must earn its place — cut anything that doesn't inform or hook
 - Use the TONE and LANGUAGE STYLE for this niche consistently throughout
-- B-roll prompts must be SPECIFIC to this topic, not generic stock-photo clichés
+|- B-roll prompts must be SPECIFIC to this topic, not generic stock-photo clichés
+|- B-roll prompts MUST describe a STATIC SCENE or OBJECT CLOSE-UP — NOT a person performing an action.
+|  AI video generation breaks with action-based prompts (morphing, disappearing objects).
+|  WRONG: "person counting cash bills" — causes morphing artifacts
+|  WRONG: "hand holding phone showing chart" — object disappears mid-clip
+|  RIGHT: "stack of cash bills fanned out on wooden desk, warm light, overhead shot"
+|  RIGHT: "phone screen displaying stock chart, shallow depth of field, bokeh background"
+|  RIGHT: "bank statement document close-up, highlighted numbers, macro lens"
+|  RULE: describe WHAT THE FRAME LOOKS LIKE — never describe what a person is doing
 
 PUBLISH COPY RULES (written after the script, tuned per platform):
 - hook_line: the standalone opening line from scene 1 — 1 sentence, no context needed, stops the scroll

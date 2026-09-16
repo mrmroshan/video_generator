@@ -46,11 +46,11 @@ def test_fetch_broll_veo2_handles_failure(tmp_path, monkeypatch):
     original = veo.generate_clip
     calls = {"n": 0}
 
-    def flaky(prompt, dest_path, duration=8):
+    def flaky(prompt, dest_path, duration=8, best_of=2):
         calls["n"] += 1
         if calls["n"] == 2:
             raise RuntimeError("simulated Veo failure")
-        return original(prompt, dest_path, duration)
+        return original(prompt, dest_path, duration, best_of)
 
     monkeypatch.setattr(veo, "generate_clip", flaky)
 
@@ -71,8 +71,8 @@ def test_fetch_broll_veo2_handles_failure(tmp_path, monkeypatch):
 
 def test_enrich_prompt_adds_style_for_finance():
     from assets.veo import _enrich_prompt
-    result = _enrich_prompt("person counting money", "finance")
-    assert "warm colour grade" in result
+    result = _enrich_prompt("stack of cash bills on desk", "finance")
+    assert "warm colour grade" in result or "golden hour" in result
 
 
 def test_enrich_prompt_skips_if_cinematic_present():
@@ -86,6 +86,35 @@ def test_enrich_prompt_unknown_niche_gets_default():
     from assets.veo import _enrich_prompt
     result = _enrich_prompt("test prompt", "unknown_niche")
     assert "4K" in result
+
+
+def test_veo_safe_prompt_rewrites_person_counting():
+    from assets.veo import _veo_safe_prompt
+    result = _veo_safe_prompt("person counting cash bills")
+    assert "person counting" not in result.lower()
+    assert "static camera" in result
+
+
+def test_veo_safe_prompt_rewrites_person_holding():
+    from assets.veo import _veo_safe_prompt
+    result = _veo_safe_prompt("person holding a phone")
+    assert "holding" not in result.lower()
+    assert "static camera" in result
+
+
+def test_veo_safe_prompt_adds_stability_keywords():
+    from assets.veo import _veo_safe_prompt
+    result = _veo_safe_prompt("stack of cash on desk")
+    assert "static camera" in result
+    assert "no morphing" in result
+
+
+def test_veo_safe_prompt_no_double_stability():
+    from assets.veo import _veo_safe_prompt
+    # If already has static camera, don't duplicate
+    prompt = "stack of bills on desk, static camera, no morphing"
+    result = _veo_safe_prompt(prompt)
+    assert result.count("static camera") == 1
 
 
 def test_generate_clip_raises_without_api_key(tmp_path, monkeypatch):
