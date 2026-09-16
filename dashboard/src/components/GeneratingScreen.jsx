@@ -9,7 +9,7 @@ const PHASES = [
   { key: 'ready_for_review',     icon: '✅', label: 'Ready for review',           desc: 'All done — opening dashboard' },
 ]
 
-export default function GeneratingScreen({ jobId, topic, niche, nicheInfo, platforms = [], onReady, onFailed, onCancel }) {
+export default function GeneratingScreen({ jobId, topic, niche, nicheInfo, platforms = [], brollSource = 'pexels', onReady, onFailed, onCancel }) {
   const [progress, setProgress]   = useState(null)
   const [elapsed, setElapsed]     = useState(0)
   const pollRef                   = useRef(null)
@@ -132,10 +132,20 @@ export default function GeneratingScreen({ jobId, topic, niche, nicheInfo, platf
         </div>
       )}
 
+      {/* Veo 2 note — shown while generating b-roll with AI */}
+      {brollSource === 'veo2' && !progress?.ready && !progress?.failed && progress?.progress_phase === 'downloading_broll' && (
+        <div className="veo2-note">
+          🤖 Veo 2 is generating custom clips for each scene (30–90s per scene).
+          This will take 3–7 minutes total. Grab a coffee ☕
+        </div>
+      )}
+
       {/* Tip */}
       {!progress?.ready && !progress?.failed && (
         <div className="generating-tip">
-          💡 This takes about 60–90 seconds. The pipeline is fully automatic.
+          {brollSource === 'veo2'
+            ? '💡 AI-generated b-roll takes a few minutes — quality over speed.'
+            : '💡 This takes about 60–90 seconds. The pipeline is fully automatic.'}
         </div>
       )}
     </div>

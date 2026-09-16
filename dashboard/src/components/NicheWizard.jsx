@@ -10,6 +10,7 @@ const DEFAULT_PLATFORMS = [
 export default function NicheWizard({ niches, defaultPlatforms = ['tiktok','instagram','youtube','facebook'], onSelect, onBack }) {
   const [selected, setSelected] = useState(new Set(defaultPlatforms))
   const [platforms, setPlatforms] = useState(DEFAULT_PLATFORMS)
+  const [brollSource, setBrollSource] = useState('pexels')
 
   const hasNiches = Object.keys(niches).length > 0
 
@@ -89,6 +90,33 @@ export default function NicheWizard({ niches, defaultPlatforms = ['tiktok','inst
             One 70-90s Shorts script · rendered once · auto-exported to {selected.size} platform{selected.size !== 1 ? 's' : ''}
           </p>
         </div>
+
+        {/* B-roll source picker */}
+        <div className="broll-source-picker">
+          <p className="broll-source-label">B-roll Source</p>
+          <label className={`broll-option${brollSource === 'pexels' ? ' active' : ''}`}>
+            <input
+              type="radio"
+              name="broll-source"
+              value="pexels"
+              checked={brollSource === 'pexels'}
+              onChange={() => setBrollSource('pexels')}
+            />
+            <span>📦 Pexels</span>
+            <span className="broll-option-desc">Free · Fast · Stock footage</span>
+          </label>
+          <label className={`broll-option${brollSource === 'veo2' ? ' active' : ''}`}>
+            <input
+              type="radio"
+              name="broll-source"
+              value="veo2"
+              checked={brollSource === 'veo2'}
+              onChange={() => setBrollSource('veo2')}
+            />
+            <span>🤖 Veo 2</span>
+            <span className="broll-option-desc">AI-generated · ~3-7 min · ~$2.50/video</span>
+          </label>
+        </div>
       </div>
 
       {!hasNiches ? (
@@ -104,7 +132,7 @@ export default function NicheWizard({ niches, defaultPlatforms = ['tiktok','inst
               key={key}
               className="niche-card"
               style={{ '--niche-color': niche.color }}
-              onClick={() => onSelect(key, [...selected])}
+              onClick={() => onSelect(key, [...selected], brollSource)}
             >
               <span className="niche-icon">{niche.icon}</span>
               <span className="niche-label">{niche.label}</span>

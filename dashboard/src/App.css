@@ -959,3 +959,20 @@ body {
   white-space: pre-wrap; word-break: break-word;
 }
 .copy-field-value.mono { font-family: monospace; font-size: 13px; font-weight: 700; color: #e0c97f; letter-spacing: .05em; }
+
+/* ── B-roll source picker ────────────────────────────────────────── */
+.broll-source-picker   { margin: 16px 0; }
+.broll-source-label    { font-size: 11px; font-weight: 700; color: #555;
+                          text-transform: uppercase; letter-spacing: .04em;
+                          margin-bottom: 8px; }
+.broll-option          { display: flex; align-items: center; gap: 10px;
+                          background: #111; border: 1px solid #1e1e2e;
+                          border-radius: 8px; padding: 10px 14px;
+                          cursor: pointer; margin-bottom: 6px;
+                          transition: border-color .15s; }
+.broll-option.active   { border-color: #6366f1; background: #0e0e1a; }
+.broll-option input    { accent-color: #6366f1; }
+.broll-option span:first-of-type { font-weight: 700; font-size: 13px; }
+.broll-option-desc     { font-size: 11px; color: #555; margin-left: auto; }
+.veo2-note             { font-size: 12px; color: #ab7cf5; margin-top: 8px;
+                          line-height: 1.6; text-align: center; }

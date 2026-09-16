@@ -13,15 +13,16 @@ sys.path.insert(0, os.path.dirname(__file__))
 from orchestration.crew import generate_script
 from audio.tts import generate_audio_for_job
 from audio.timestamps import extract_timestamps
-from assets.stock import fetch_broll_for_job
+from assets.broll import fetch_broll_for_job
 from data.db import init_db, save_job, update_status, load_job
 from renderer.render import render_job
 from distribution.publishers.distribute import distribute
 
 
-def run_pipeline(topic: str, platform: str, niche: str = "finance"):
+def run_pipeline(topic: str, platform: str, niche: str = "finance",
+                 broll_source: str = "pexels"):
     print(f"\n🎬 Starting VIDEO MAKER pipeline")
-    print(f"   Topic: {topic} | Niche: {niche} | Platform: {platform}\n")
+    print(f"   Topic: {topic} | Niche: {niche} | Platform: {platform} | B-roll: {broll_source}\n")
 
     init_db()
     job = {}
@@ -31,6 +32,7 @@ def run_pipeline(topic: str, platform: str, niche: str = "finance"):
         print("── Phase 1: Generating script...")
         job = generate_script(topic, platform, niche=niche)
         job["niche"] = niche
+        job["broll_source"] = broll_source
         save_job(job)
         print(f"   Job ID: {job['job_id']} ✓")
 
@@ -100,5 +102,7 @@ if __name__ == "__main__":
                         help="Content niche (drives audience/tone/hooks)")
     parser.add_argument("--platform", choices=VALID_PLATFORMS, default="tiktok",
                         help="Primary platform for script style")
+    parser.add_argument("--broll-source", choices=["pexels", "veo2"], default="pexels",
+                        help="B-roll source: pexels (free, fast) or veo2 (AI-generated, slower)")
     args = parser.parse_args()
-    run_pipeline(args.topic, args.platform, niche=args.niche)
+    run_pipeline(args.topic, args.platform, niche=args.niche, broll_source=args.broll_source)

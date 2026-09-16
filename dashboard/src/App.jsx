@@ -25,6 +25,7 @@ export default function App() {
   const [wizardNiche, setWizardNiche]   = useState(null)
   // Persist platform selection across wizard sessions
   const [wizardPlatforms, setWizardPlatforms] = useState(['tiktok','instagram','youtube','facebook'])
+  const [wizardBrollSource, setWizardBrollSource] = useState('pexels')
   const [generatingJob, setGenJob]      = useState(null)
   const [wizardError, setWizardError]   = useState(null)
   const [createLoading, setCreateLoading] = useState(false)
@@ -81,9 +82,10 @@ export default function App() {
     setStep(STEP.NICHE)
   }
 
-  const handleNicheSelect = (nicheKey, platforms) => {
+  const handleNicheSelect = (nicheKey, platforms, brollSource = 'pexels') => {
     setWizardNiche(nicheKey)
     setWizardPlatforms(platforms)
+    setWizardBrollSource(brollSource)
     setStep(STEP.TOPIC)
   }
 
@@ -94,15 +96,16 @@ export default function App() {
       const res = await fetch('/api/jobs/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(params),
+        body: JSON.stringify({ ...params, broll_source: wizardBrollSource }),
       })
       if (!res.ok) throw new Error(await res.text())
       const { job_id } = await res.json()
       setGenJob({
-        jobId:     job_id,
-        topic:     params.topic_title,
-        niche:     params.niche,
-        platforms: params.platforms,
+        jobId:       job_id,
+        topic:       params.topic_title,
+        niche:       params.niche,
+        platforms:   params.platforms,
+        brollSource: wizardBrollSource,
       })
       setStep(STEP.GENERATING)
     } catch (e) {
@@ -208,6 +211,7 @@ export default function App() {
             niche={generatingJob.niche}
             nicheInfo={niches[generatingJob.niche]}
             platforms={generatingJob.platforms}
+            brollSource={generatingJob.brollSource}
             onReady={handleGeneratingReady}
             onFailed={handleGeneratingFailed}
             onCancel={handleGeneratingCancel}

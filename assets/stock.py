@@ -15,7 +15,7 @@ PEXELS_API_KEY = os.getenv("PEXELS_API_KEY", "")
 JOBS_DIR = os.getenv("JOBS_DIR", str(_ROOT / "data" / "jobs"))
 
 
-def fetch_broll_for_job(job: dict) -> dict:
+def fetch_broll_pexels(job: dict) -> dict:
     """
     For each scene, search Pexels for a matching video clip.
     Adds 'broll_path' to each scene in the job.
@@ -137,3 +137,7 @@ def _download_video(url: str, dest: str):
         raise RuntimeError(f"Download failed for {url}: {e}") from e
     size = os.path.getsize(dest)
     print(f"  Done — {size:,} bytes ({size // 1024} KB)")
+
+
+# Backward-compat alias — existing imports still work during transition
+fetch_broll_for_job = fetch_broll_pexels

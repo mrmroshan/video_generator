@@ -96,6 +96,7 @@ class CreateJobPayload(BaseModel):
     topic_hook:     str = ""
     platforms:      List[str] = ["tiktok", "instagram", "youtube", "facebook"]
     caption_style:  str = "karaoke"
+    broll_source:   str = "pexels"   # "pexels" | "veo2"
 
     @property
     def platform(self) -> str:
@@ -120,6 +121,9 @@ def create_job(payload: CreateJobPayload, background_tasks: BackgroundTasks):
         raise HTTPException(422, f"Unknown platform(s): {bad}. Choose from: {sorted(VALID_PLATFORMS)}")
     if not payload.platforms:
         raise HTTPException(422, "At least one platform must be selected")
+    broll_source = (payload.broll_source or "pexels").lower()
+    if broll_source not in {"pexels", "veo2"}:
+        raise HTTPException(422, f"Unknown broll_source '{payload.broll_source}'. Choose from: pexels, veo2")
 
     # Pre-create the job record so the UI can poll immediately
     import uuid
@@ -135,6 +139,7 @@ def create_job(payload: CreateJobPayload, background_tasks: BackgroundTasks):
         "topic":          payload.topic_title,
         "topic_hook":     payload.topic_hook,
         "caption_style":  payload.caption_style,
+        "broll_source":   broll_source,
         "created_at":     datetime.now(timezone.utc).isoformat(),
         "scenes":         [],
         "progress_phase": "queued",
@@ -181,10 +186,11 @@ def _run_wizard_pipeline(job_id: str, payload: "CreateJobPayload"):
     from orchestration.crew import generate_script
     from audio.tts import generate_audio_for_job
     from audio.timestamps import extract_timestamps
-    from assets.stock import fetch_broll_for_job
+    from assets.broll import fetch_broll_for_job
 
     platforms = [p.lower() for p in (payload.platforms or ["tiktok"])]
     primary   = platforms[0]
+    broll_source = (getattr(payload, "broll_source", "pexels") or "pexels").lower()
 
     try:
         # Phase 1 — Script (always Shorts/9:16, primary platform drives rules)
@@ -199,6 +205,7 @@ def _run_wizard_pipeline(job_id: str, payload: "CreateJobPayload"):
         job["caption_style"]    = payload.caption_style
         job["platform"]         = primary
         job["platforms"]        = platforms   # full list for auto-export
+        job["broll_source"]     = broll_source
         job["status"]           = "pending"
         job["progress_phase"]   = "generating_script"
         job["progress_detail"]  = "Script complete — generating audio..."
@@ -227,10 +234,14 @@ def _run_wizard_pipeline(job_id: str, payload: "CreateJobPayload"):
                 print(f"  [WARN] Timestamps failed for {scene['scene_id']}: {e}")
         save_job(job)
 
-        # Phase 4 — B-roll
-        update_progress(job_id, "downloading_broll", "Downloading B-roll clips from Pexels...")
+        # Phase 4 — B-roll (source: Pexels or Veo 2)
+        if broll_source == "veo2":
+            broll_msg = "Generating custom B-roll with Veo 2 AI... (this takes a few minutes)"
+        else:
+            broll_msg = "Downloading B-roll clips from Pexels..."
+        update_progress(job_id, "downloading_broll", broll_msg)
         job["progress_phase"]  = "downloading_broll"
-        job["progress_detail"] = "Downloading B-roll clips from Pexels..."
+        job["progress_detail"] = broll_msg
         job = fetch_broll_for_job(job)
         save_job(job)
 
