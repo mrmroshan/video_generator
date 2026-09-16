@@ -1,13 +1,18 @@
 """
-assets/veo.py — Veo 2 video generation via Google Gemini API
+assets/veo.py — Veo 3.1 video generation via Google Gemini API
 
 Generates an 8-second 9:16 clip from a broll_prompt.
 Each scene in the job gets its own clip.
 
+API note: Veo 3.1 returns a download URI (not raw bytes).
+We authenticate the download with x-goog-api-key header.
+
 MOCK_APIS=true → creates a silent black MP4 stub (no API call).
 """
 import os
+import ssl
 import time
+import urllib.request
 import subprocess
 from pathlib import Path
 
@@ -16,16 +21,27 @@ MOCK_APIS = os.getenv("MOCK_APIS", "true").lower() == "true"
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 JOBS_DIR = os.getenv("JOBS_DIR", str(_ROOT / "data" / "jobs"))
 
-# Model constant (upgrade path when Veo 3 is stable)
-VEO_MODEL = "veo-2.0-generate-001"
+# Model — use fast for speed, swap to generate-preview for max quality
+VEO_MODEL   = "veo-3.1-fast-generate-preview"
+VEO_MODEL_HQ = "veo-3.1-generate-preview"
 DEFAULT_DURATION = 8
-MAX_WAIT_SECONDS = 180
+MAX_WAIT_SECONDS = 300   # 5 min — Veo 3.1 can take up to 90s+ per clip
 POLL_INTERVAL_SECONDS = 10
 
 
-def generate_clip(prompt: str, dest_path: str, duration: int = DEFAULT_DURATION) -> str:
+def _ssl_ctx():
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        return ssl.create_default_context()
+
+
+def generate_clip(prompt: str, dest_path: str, duration: int = DEFAULT_DURATION,
+                  quality: str = "fast") -> str:
     """
-    Generate a single Veo 2 clip from prompt.
+    Generate a single Veo 3.1 clip from prompt.
+    quality: "fast" (veo-3.1-fast) or "hq" (veo-3.1-generate)
     Saves to dest_path. Returns dest_path.
     Raises RuntimeError on failure.
     """
@@ -33,19 +49,21 @@ def generate_clip(prompt: str, dest_path: str, duration: int = DEFAULT_DURATION)
 
     if MOCK_APIS:
         _write_mock_clip(dest_path, duration)
-        print(f"[MOCK/VEO2] Clip → {dest_path}")
+        print(f"[MOCK/VEO3.1] Clip → {dest_path}")
         return dest_path
 
-    if not GEMINI_API_KEY:
-        raise RuntimeError("GEMINI_API_KEY not set — cannot generate Veo 2 clip")
+    api_key = os.getenv("GEMINI_API_KEY", GEMINI_API_KEY)
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY not set — cannot generate Veo clip")
 
     from google import genai
-    client = genai.Client(api_key=GEMINI_API_KEY)
+    client = genai.Client(api_key=api_key)
+    model = VEO_MODEL_HQ if quality == "hq" else VEO_MODEL
 
-    print(f"  [VEO2] Generating clip: {prompt[:80]}...")
+    print(f"  [VEO3.1] Generating ({model}): {prompt[:80]}...")
 
     operation = client.models.generate_videos(
-        model=VEO_MODEL,
+        model=model,
         prompt=prompt,
         config=genai.types.GenerateVideosConfig(
             aspect_ratio="9:16",
@@ -54,29 +72,48 @@ def generate_clip(prompt: str, dest_path: str, duration: int = DEFAULT_DURATION)
         ),
     )
 
-    # Poll until done (Veo 2 typically takes 30-90s)
+    # Poll until done
     waited = 0
     while not operation.done:
         if waited >= MAX_WAIT_SECONDS:
-            raise RuntimeError(f"Veo 2 generation timed out after {MAX_WAIT_SECONDS}s")
+            raise RuntimeError(f"Veo 3.1 generation timed out after {MAX_WAIT_SECONDS}s")
         time.sleep(POLL_INTERVAL_SECONDS)
         waited += POLL_INTERVAL_SECONDS
         operation = client.operations.get(operation)
-        print(f"  [VEO2] Waiting... ({waited}s)")
+        print(f"  [VEO3.1] Waiting... ({waited}s)")
 
     videos = operation.result.generated_videos
     if not videos:
-        raise RuntimeError("Veo 2 returned no videos")
+        raise RuntimeError("Veo 3.1 returned no videos")
 
-    video_bytes = videos[0].video.video_bytes
-    if not video_bytes:
-        raise RuntimeError("Veo 2 video bytes are empty")
+    video = videos[0].video
+    if not video:
+        raise RuntimeError("Veo 3.1: no video object in result")
 
-    with open(dest_path, "wb") as f:
-        f.write(video_bytes)
+    # Veo 3.1 returns a URI — download it with API key auth
+    if video.uri:
+        _download_uri(video.uri, dest_path, api_key)
+    elif video.video_bytes:
+        with open(dest_path, "wb") as f:
+            f.write(video.video_bytes)
+    else:
+        raise RuntimeError("Veo 3.1: neither uri nor video_bytes in result")
 
-    print(f"  [VEO2] ✓ {dest_path} ({len(video_bytes) // 1024}KB)")
+    size_kb = os.path.getsize(dest_path) // 1024
+    print(f"  [VEO3.1] ✓ {dest_path} ({size_kb}KB)")
     return dest_path
+
+
+def _download_uri(uri: str, dest_path: str, api_key: str):
+    """Download a Veo-generated clip from the Gemini Files API URI."""
+    req = urllib.request.Request(
+        uri,
+        headers={"x-goog-api-key": api_key}
+    )
+    with urllib.request.urlopen(req, timeout=120, context=_ssl_ctx()) as resp:
+        data = resp.read()
+    with open(dest_path, "wb") as f:
+        f.write(data)
 
 
 def _write_mock_clip(dest_path: str, duration: int = DEFAULT_DURATION):
@@ -92,15 +129,14 @@ def _write_mock_clip(dest_path: str, duration: int = DEFAULT_DURATION):
             dest_path,
         ], capture_output=True, check=True)
     except Exception:
-        # Ultimate fallback — stub file (render will skip it gracefully)
-        Path(dest_path).write_bytes(b"MOCK_VEO2_CLIP")
+        Path(dest_path).write_bytes(b"MOCK_VEO31_CLIP")
 
 
 def fetch_broll_veo2(job: dict) -> dict:
     """
-    Generate Veo 2 clips for all scenes in a job.
+    Generate Veo 3.1 clips for all scenes in a job.
     Adds 'broll_path' to each scene. Returns updated job.
-    Scenes are processed sequentially (API rate limits).
+    Scenes processed sequentially (API rate limits).
     """
     job_dir = os.path.abspath(os.path.join(JOBS_DIR, job["job_id"]))
     os.makedirs(job_dir, exist_ok=True)
@@ -110,42 +146,40 @@ def fetch_broll_veo2(job: dict) -> dict:
         broll_path = os.path.join(job_dir, f"{scene_id}_broll.mp4")
         prompt     = scene.get("broll_prompt", "cinematic short video clip, 9:16 vertical")
 
-        # Enrich prompt for Veo 2 — add niche style context
         enriched = _enrich_prompt(prompt, job.get("niche", ""))
 
         try:
             generate_clip(enriched, broll_path)
             scene["broll_path"]   = broll_path
-            scene["broll_source"] = "veo2"
-            scene["broll_meta"]   = {"source": "veo2", "model": VEO_MODEL}
+            scene["broll_source"] = "veo3.1"
+            scene["broll_meta"]   = {"source": "veo3.1", "model": VEO_MODEL}
         except Exception as e:
-            print(f"  [WARN] Veo 2 failed for {scene_id}: {e}")
+            print(f"  [WARN] Veo 3.1 failed for {scene_id}: {e}")
             scene["broll_path"]   = None
-            scene["broll_source"] = "veo2_failed"
-            scene["broll_meta"]   = {"source": "veo2_failed", "reason": str(e)}
+            scene["broll_source"] = "veo_failed"
+            scene["broll_meta"]   = {"source": "veo_failed", "reason": str(e)}
 
     return job
 
 
 def _enrich_prompt(prompt: str, niche: str) -> str:
-    """
-    Append consistent cinematic style guidance to the broll_prompt.
-    Keeps prompts concise — Veo 2 works better with focused prompts.
-    """
+    """Append niche-specific cinematic style to the broll_prompt."""
     style_suffixes = {
-        "finance":         "cinematic, warm colour grade, shallow depth of field, 4K",
+        "finance":          "cinematic, warm colour grade, shallow depth of field, 4K",
         "entrepreneurship": "documentary style, natural light, handheld energy",
-        "health":          "clean bright aesthetic, soft natural light, calm",
-        "tech":            "sleek modern, blue-tinted light, sharp focus",
-        "mindset":         "moody cinematic, golden hour, contemplative",
-        "productivity":    "clean minimal, natural light, focused energy",
-        "ai":              "futuristic, blue-purple tones, sharp crisp",
-        "marketing":       "bold vibrant, high contrast, energetic",
-        "fitness":         "high energy, warm golden tones, dynamic motion",
-        "relationships":   "warm intimate, soft bokeh, authentic moments",
+        "health":           "clean bright aesthetic, soft natural light, calm",
+        "tech":             "sleek modern, blue-tinted light, sharp focus",
+        "mindset":          "moody cinematic, golden hour, contemplative",
+        "productivity":     "clean minimal, natural light, focused energy",
+        "ai":               "futuristic, blue-purple tones, sharp crisp",
+        "marketing":        "bold vibrant, high contrast, energetic",
+        "fitness":          "high energy, warm golden tones, dynamic motion",
+        "relationships":    "warm intimate, soft bokeh, authentic moments",
     }
     suffix = style_suffixes.get(niche, "cinematic, 4K, professional")
-    # Avoid duplicating style words already in prompt
     if "cinematic" in prompt.lower():
         return prompt
     return f"{prompt}, {suffix}"
+
+
+

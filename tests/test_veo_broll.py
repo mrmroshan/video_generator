@@ -33,7 +33,7 @@ def test_fetch_broll_veo2_adds_broll_path(tmp_path, monkeypatch):
     result = veo.fetch_broll_veo2(job)
     assert result["scenes"][0]["broll_path"].endswith("scene_01_broll.mp4")
     assert result["scenes"][1]["broll_path"].endswith("scene_02_broll.mp4")
-    assert result["scenes"][0]["broll_source"] == "veo2"
+    assert result["scenes"][0]["broll_source"] == "veo3.1"
     assert os.path.exists(result["scenes"][0]["broll_path"])
 
 
@@ -64,9 +64,9 @@ def test_fetch_broll_veo2_handles_failure(tmp_path, monkeypatch):
     }
     result = veo.fetch_broll_veo2(job)
     assert result["scenes"][0]["broll_path"] is not None
-    assert result["scenes"][0]["broll_source"] == "veo2"
+    assert result["scenes"][0]["broll_source"] == "veo3.1"
     assert result["scenes"][1]["broll_path"] is None
-    assert result["scenes"][1]["broll_source"] == "veo2_failed"
+    assert result["scenes"][1]["broll_source"] == "veo_failed"
 
 
 def test_enrich_prompt_adds_style_for_finance():
@@ -92,6 +92,7 @@ def test_generate_clip_raises_without_api_key(tmp_path, monkeypatch):
     from assets import veo
     monkeypatch.setattr(veo, "MOCK_APIS", False)
     monkeypatch.setattr(veo, "GEMINI_API_KEY", "")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     with pytest.raises(RuntimeError, match="GEMINI_API_KEY not set"):
         veo.generate_clip("test", str(tmp_path / "x.mp4"))
 
