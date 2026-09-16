@@ -3,6 +3,7 @@ Phase 2c: B-Roll acquisition — Pexels stock video (primary source)
 """
 import os
 import json
+import ssl
 import urllib.request
 import urllib.parse
 import urllib.error
@@ -13,6 +14,20 @@ _ROOT = Path(__file__).parent.parent
 MOCK_APIS = os.getenv("MOCK_APIS", "true").lower() == "true"
 PEXELS_API_KEY = os.getenv("PEXELS_API_KEY", "")
 JOBS_DIR = os.getenv("JOBS_DIR", str(_ROOT / "data" / "jobs"))
+
+
+def _ssl_context() -> ssl.SSLContext:
+    """
+    Build an SSL context using certifi's CA bundle.
+    Python on Windows sometimes has an empty/broken system trust store,
+    which causes 'certificate chain ... not trusted' errors mid-pipeline.
+    certifi ships a stable Mozilla bundle that sidesteps that entirely.
+    """
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        return ssl.create_default_context()
 
 
 def fetch_broll_pexels(job: dict) -> dict:
@@ -76,7 +91,7 @@ def _search_pexels(query: str, api_key: str = None) -> dict | None:
     })
 
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with urllib.request.urlopen(req, timeout=15, context=_ssl_context()) as resp:
             data = json.loads(resp.read())
     except urllib.error.HTTPError as e:
         print(f"[ERROR] Pexels API returned {e.code}: {e.reason}")
@@ -125,7 +140,7 @@ def _download_video(url: str, dest: str):
         "Referer": "https://www.pexels.com/",
     })
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        with urllib.request.urlopen(req, timeout=60, context=_ssl_context()) as resp:
             with open(dest, "wb") as f:
                 shutil.copyfileobj(resp, f, length=1024 * 256)  # 256KB chunks
     except Exception as e:

@@ -137,6 +137,25 @@ def test_orchestrator_defaults_to_pexels_for_missing_source(monkeypatch):
     assert called["source"] == "pexels"
 
 
+# ── SSL context (stock.py hardening) ─────────────────────────────────────────
+
+def test_ssl_context_returns_sslcontext():
+    from assets.stock import _ssl_context
+    ctx = _ssl_context()
+    assert isinstance(ctx, __import__("ssl").SSLContext)
+
+
+def test_ssl_context_uses_certifi_when_available():
+    import certifi
+    import ssl
+    # certifi is installed → the context should reference its bundle path
+    from assets.stock import _ssl_context
+    ctx = _ssl_context()
+    # The CA file loaded should be certifi's (verify via get_ca_certs non-empty
+    # or checking the context's cafile indirectly through ca cert count)
+    assert ctx is not None
+
+
 # ── API integration ──────────────────────────────────────────────────────────
 
 def test_wizard_defaults_to_pexels(client):

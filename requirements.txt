@@ -9,6 +9,12 @@ python-multipart>=0.0.6
 # Speech recognition (word-level timestamps for karaoke captions)
 faster-whisper>=1.0.0
 
+# TLS cert bundle (reliable CA store for urllib on Windows)
+certifi>=2023.0.0
+
+# AI video generation (Veo 2 b-roll)
+google-genai>=1.0.0
+
 # Dev / testing
 pytest>=7.0.0
 pytest-mock>=3.0.0
