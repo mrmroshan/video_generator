@@ -794,7 +794,147 @@ body {
   transition: background .15s, color .15s;
 }
 .platform-check.on { background: #6366f1; color: #fff; }
-.platform-hint { font-size: 11px; color: #444; text-align: center; margin: 0; }
+.platform-hint { font-size: 12px; color: #555; text-align: center; margin: 4px 0 0; line-height: 1.5; }
+.platform-hint strong { color: #c7d2fe; }
+.platform-hint-formats { color: #6366f1; }
+
+/* ── Two-level Platform → Format picker ─────────────────────────── */
+.platform-groups {
+  display: flex; flex-direction: column; gap: 6px; width: 100%;
+}
+
+/* One brand row (e.g. Instagram) */
+.platform-group {
+  background: #0f0f1a;
+  border: 1.5px solid #1e1e2e;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: border-color .15s;
+}
+.platform-group.group-on {
+  border-color: #6366f1;
+}
+
+/* Brand header button (TikTok ✓ row) */
+.platform-brand-btn {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; background: none; border: none;
+  padding: 11px 14px 8px; cursor: pointer;
+  text-align: left;
+  transition: background .15s;
+}
+.platform-brand-btn:hover { background: #13131c; }
+.platform-brand-btn.active { background: #111126; }
+
+.platform-icon {
+  font-size: 20px; flex-shrink: 0; line-height: 1;
+}
+.platform-label {
+  font-size: 14px; font-weight: 700; color: #c8c8e8; flex: 1;
+}
+.platform-check {
+  font-size: 11px; font-weight: 800; color: #444;
+  background: #1e1e2e; border-radius: 50%;
+  width: 20px; height: 20px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s, color .15s;
+}
+.platform-check.on { background: #6366f1; color: #fff; }
+
+/* Format chips row (Reels · Square · Portrait) */
+.format-chips {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding: 0 12px 11px 44px;   /* indent to align under brand label */
+}
+
+.format-chip {
+  display: flex; align-items: center; gap: 6px;
+  background: #13131c; border: 1.5px solid #252535;
+  border-radius: 20px; padding: 5px 12px;
+  cursor: pointer; font-size: 0; /* hide all child text by default */
+  transition: border-color .15s, background .15s, transform .1s;
+  outline: none;
+}
+.format-chip:hover:not(:disabled) {
+  border-color: #6366f1; background: #1a1a2e; transform: translateY(-1px);
+}
+.format-chip.chip-on {
+  border-color: #6366f1; background: #1a1a2e;
+}
+.format-chip.chip-soon {
+  opacity: .45; cursor: not-allowed;
+}
+.format-chip.chip-soon:hover { transform: none; }
+
+/* Re-enable font size for all children */
+.format-chip > * { font-size: 12px; }
+
+/* The format name (e.g. "Reels") */
+.chip-label {
+  font-size: 12px !important; font-weight: 700; color: #c8c8e8; white-space: nowrap;
+}
+.format-chip.chip-on .chip-label { color: #c7d2fe; }
+
+/* The dimension hint (e.g. "9:16 · Reels") */
+.chip-desc {
+  font-size: 11px !important; color: #555; white-space: nowrap;
+}
+.format-chip.chip-on .chip-desc { color: #7c7ff5; }
+
+/* "Coming soon" badge */
+.chip-soon-badge {
+  font-size: 11px !important; margin-left: 2px;
+}
+
+/* ── Per-format download panel ───────────────────────────────────── */
+.format-downloads {
+  background: #0f0f1a; border: 1px solid #1e1e2e;
+  border-radius: 14px; padding: 18px 20px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.format-downloads-label {
+  font-size: 13px; font-weight: 700; color: #888;
+  text-transform: uppercase; letter-spacing: .06em;
+}
+.format-downloads-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+}
+.format-download-card {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  background: #13131c; border: 1.5px solid #252535;
+  border-radius: 12px; padding: 14px 10px;
+  transition: border-color .15s;
+}
+.format-download-card.ready {
+  border-color: #4caf6e;
+}
+.fdc-icon  { font-size: 22px; }
+.fdc-label { font-size: 12px; font-weight: 700; color: #c8c8e8; text-align: center; }
+.fdc-desc  {
+  font-size: 11px; color: #555;
+  background: #1e1e2e; border-radius: 20px;
+  padding: 2px 8px;
+}
+.btn-fmt-download {
+  margin-top: 4px; width: 100%;
+  background: #4caf6e; border: none; color: #fff;
+  padding: 7px 10px; border-radius: 8px;
+  font-size: 12px; font-weight: 700; text-align: center;
+  text-decoration: none; cursor: pointer;
+  transition: background .15s;
+}
+.btn-fmt-download:hover { background: #5dc47e; }
+.btn-fmt-export {
+  margin-top: 4px; width: 100%;
+  background: #1a1a2e; border: 1.5px solid #6366f1; color: #c7d2fe;
+  padding: 7px 10px; border-radius: 8px;
+  font-size: 12px; font-weight: 700; cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.btn-fmt-export:hover:not(:disabled)    { background: #252550; }
+.btn-fmt-export:disabled { opacity: .5; cursor: not-allowed; }
 
 /* ── Header nav tabs ─────────────────────────────────────────────── */
 .header-tabs { display: flex; gap: 4px; }

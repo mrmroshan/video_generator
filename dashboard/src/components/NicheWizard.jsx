@@ -195,7 +195,7 @@ export default function NicheWizard({ niches, defaultPlatforms = ['tiktok', 'ins
                           title={fmt.available ? fmt.desc : 'Coming soon'}
                           disabled={!fmt.available}
                         >
-                          {fmt.label}
+                          <span className="chip-label">{fmt.label}</span>
                           <span className="chip-desc">{fmt.desc}</span>
                           {!fmt.available && <span className="chip-soon-badge">🔜</span>}
                         </button>
