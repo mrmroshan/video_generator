@@ -34,25 +34,87 @@ body {
 }
 
 /* ── Job list ─────────────────────────────────────────────────────── */
-.job-list-header { margin-bottom: 18px; }
-.job-list-header h2 { font-size: 18px; font-weight: 600; }
-.job-count { font-size: 12px; color: #555; margin-top: 3px; }
+.job-list-header {
+  display: flex; align-items: baseline; gap: 10px; margin-bottom: 20px;
+}
+.job-list-header h2 { font-size: 20px; font-weight: 700; color: #e2e2ee; }
+.job-count { font-size: 12px; color: #444; }
 
 .job-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
 }
 
+/* ── Job card ─────────────────────────────────────────────────────── */
 .job-card {
-  background: #13131c; border: 1px solid #1e1e2e;
-  border-radius: 10px; padding: 16px; cursor: pointer;
-  transition: border-color .15s, transform .1s;
+  background: #111118;
+  border: 1.5px solid #1c1c2a;
+  border-radius: 14px;
+  padding: 16px 18px;
+  cursor: pointer;
+  display: flex; flex-direction: column; gap: 10px;
+  transition: border-color .15s, transform .1s, background .15s;
+  min-height: 130px;
 }
-.job-card:hover { border-color: #6366f1; transform: translateY(-1px); }
-.job-card-title { font-size: 14px; font-weight: 600; margin-bottom: 8px; line-height: 1.35; }
-.job-card-meta { font-size: 12px; color: #555; display: flex; flex-direction: column; gap: 4px; }
-.job-card-meta span { display: flex; align-items: center; gap: 5px; }
+.job-card:hover {
+  border-color: #6366f1;
+  background: #13131e;
+  transform: translateY(-2px);
+}
+
+/* Subtle left-edge accent by status */
+.status-card-done     { border-left: 3px solid #4caf6e; }
+.status-card-failed   { border-left: 3px solid #f08080; }
+.status-card-in_review{ border-left: 3px solid #6aa3f5; }
+.status-card-approved { border-left: 3px solid #a3f56a; }
+.status-card-rendering{ border-left: 3px solid #ab7cf5; }
+
+/* Top row: status badge + time */
+.job-card-top {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.job-card-time { font-size: 11px; color: #3a3a55; white-space: nowrap; }
+
+/* Title */
+.job-card-title {
+  font-size: 13px; font-weight: 600; color: #d0d0e8;
+  line-height: 1.45; flex: 1;
+}
+.job-card-title.title-lg { font-size: 15px; font-weight: 700; color: #e2e2ee; }
+
+/* Niche + scenes row */
+.job-card-sub {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.job-niche-tag {
+  font-size: 11px; color: #888;
+  background: #1a1a28; border-radius: 20px;
+  padding: 2px 8px; text-transform: capitalize;
+}
+.job-scenes-tag { font-size: 11px; color: #444; }
+
+/* Format pills */
+.job-format-pills {
+  display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px;
+}
+.job-fmt-pill {
+  font-size: 10px; font-weight: 600; color: #6366f1;
+  background: #11112a; border: 1px solid #2a2a50;
+  border-radius: 20px; padding: 2px 7px;
+  white-space: nowrap;
+}
+.job-fmt-more { color: #444; border-color: #1e1e30; background: #111118; }
+
+/* Empty state */
+.empty-state {
+  text-align: center; padding: 80px 20px; color: #444;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+}
+.empty-state-icon { font-size: 48px; margin-bottom: 8px; }
+.empty-state p { font-size: 15px; }
+.empty-state-sub { font-size: 13px; color: #333; }
+.empty-state strong { color: #6366f1; }
 
 /* ── Status badges ────────────────────────────────────────────────── */
 .status-badge {
@@ -69,9 +131,6 @@ body {
 .status-failed           { background: #1e0f0f; color: #f08080; }
 
 .loading-state { color: #444; text-align: center; padding: 60px; }
-.empty-state { color: #444; text-align: center; padding: 60px; }
-.empty-state p { margin-bottom: 6px; }
-.empty-state code { font-size: 12px; background: #13131c; padding: 2px 6px; border-radius: 4px; }
 
 /* ── Review page root ─────────────────────────────────────────────── */
 .review-root { display: flex; flex-direction: column; gap: 0; }
@@ -613,13 +672,19 @@ body {
 
 /* Shared wizard screen wrapper */
 .wizard-screen {
-  max-width: 960px; margin: 0 auto; padding: 32px 24px;
-  display: flex; flex-direction: column; gap: 24px;
+  max-width: 760px; margin: 0 auto; padding: 32px 24px;
+  display: flex; flex-direction: column; gap: 28px; align-items: center;
+}
+
+/* Centered content column */
+.wizard-body {
+  display: flex; flex-direction: column; gap: 16px;
+  width: 100%; max-width: 560px; align-items: center;
 }
 
 .wizard-header { text-align: center; display: flex; flex-direction: column; gap: 8px; align-items: center; }
-.wizard-title  { font-size: 28px; font-weight: 800; color: #e2e2ee; margin: 0; }
-.wizard-subtitle { font-size: 15px; color: #666; margin: 0; }
+.wizard-title  { font-size: 26px; font-weight: 800; color: #e2e2ee; margin: 0; }
+.wizard-subtitle { font-size: 14px; color: #555; margin: 0; }
 .wizard-topic-preview { font-size: 16px; color: #c7d2fe; font-style: italic; margin: 0; }
 .wizard-elapsed { font-size: 13px; color: #444; margin: 0; }
 
@@ -655,7 +720,10 @@ body {
 
 /* ── Niche grid ──────────────────────────────────────────── */
 .niche-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+  width: 100%;
 }
 .niche-card {
   display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
@@ -776,7 +844,7 @@ body {
 }
 
 /* ── Platform multi-select additions ────────────────────────────── */
-.platform-section { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 520px; }
+.platform-section { display: flex; flex-direction: column; gap: 10px; width: 100%; }
 .platform-section-label {
   display: flex; justify-content: space-between; align-items: center;
   font-size: 12px; color: #555; text-transform: uppercase; letter-spacing: .05em;
@@ -1101,7 +1169,7 @@ body {
 .copy-field-value.mono { font-family: monospace; font-size: 13px; font-weight: 700; color: #e0c97f; letter-spacing: .05em; }
 
 /* ── B-roll source picker ────────────────────────────────────────── */
-.broll-source-picker   { margin: 16px 0; }
+.broll-source-picker   { margin: 8px 0; width: 100%; }
 .broll-source-label    { font-size: 11px; font-weight: 700; color: #555;
                           text-transform: uppercase; letter-spacing: .04em;
                           margin-bottom: 8px; }
