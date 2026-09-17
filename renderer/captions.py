@@ -144,6 +144,8 @@ def make_ass(caption_text: str, duration: float, style_name: str = "clean",
     scale         = height / 720.0
     scaled_size   = max(18, int(st['size']   * scale))
     scaled_margin = max(15, int(st['margin_v'] * scale))
+    scaled_margin_l = max(10, int(st['margin_l'] * scale))
+    scaled_margin_r = max(10, int(st['margin_r'] * scale))
 
     fade_ms = 300
     start   = 0.0
@@ -158,7 +160,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,{st['font']},{scaled_size},{st['primary']},{st['secondary']},{st['outline_col']},{st['back_col']},{st['bold']},{st['italic']},0,0,100,100,{st['line_spacing']},0,{st['border_style']},{st['outline']},{st['shadow']},{st['alignment']},{st['margin_l']},{st['margin_r']},{scaled_margin},1
+Style: Default,{st['font']},{scaled_size},{st['primary']},{st['secondary']},{st['outline_col']},{st['back_col']},{st['bold']},{st['italic']},0,0,100,100,{st['line_spacing']},0,{st['border_style']},{st['outline']},{st['shadow']},{st['alignment']},{scaled_margin_l},{scaled_margin_r},{scaled_margin},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -388,14 +390,18 @@ def make_karaoke_ass(
            for w in words if w.get("word", "").strip()]
 
     # Guard: empty word list (silence, very short audio, whitespace-only)
+    # Use the actual width/height so ASS PlayRes matches the target export resolution.
     if not adj:
+        scale         = height / 720.0
+        scaled_size   = max(24, int(52 * scale))
+        scaled_margin = max(20, int(60 * scale))
         return (
-            "[Script Info]\nScriptType: v4.00+\nPlayResX: 1280\nPlayResY: 720\n\n"
+            f"[Script Info]\nScriptType: v4.00+\nPlayResX: {width}\nPlayResY: {height}\n\n"
             "[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, "
             "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, "
             "Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
-            "Style: Base,Arial,52,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,"
-            "1,0,0,0,100,100,0,0,1,3.0,1.5,2,60,60,60,1\n\n"
+            f"Style: Base,Arial,{scaled_size},&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,"
+            f"1,0,0,0,100,100,0,0,1,3.0,1.5,2,60,60,{scaled_margin},1\n\n"
             "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
         )
 
@@ -461,8 +467,10 @@ def make_karaoke_ass(
     # ── Build ASS header — use actual video dimensions ────────────────
     # Font size and margins scale proportionally to video height
     scale = height / 720.0
-    scaled_size   = max(24, int(st["size"]   * scale))
-    scaled_margin = max(20, int(st["margin_v"] * scale))
+    scaled_size     = max(24, int(st["size"]     * scale))
+    scaled_margin   = max(20, int(st["margin_v"] * scale))
+    scaled_margin_l = max(10, int(st["margin_l"] * scale))
+    scaled_margin_r = max(10, int(st["margin_r"] * scale))
 
     ass_lines = [
         "[Script Info]",
@@ -484,7 +492,7 @@ def make_karaoke_ass(
         f"{st['outline_col']},{st['back_col']},"
         f"{st['bold']},0,0,0,100,100,0,0,1,"
         f"{st['outline']},{st['shadow']},"
-        f"{st['alignment']},{st['margin_l']},{st['margin_r']},{scaled_margin},1"
+        f"{st['alignment']},{scaled_margin_l},{scaled_margin_r},{scaled_margin},1"
     )
 
     ass_lines += ["", "[Events]",

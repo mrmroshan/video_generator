@@ -53,10 +53,24 @@ def test_caption_styles_endpoint(client):
 
 
 def test_platforms_endpoint(client):
-    """GET /platforms returns exactly 4 platforms."""
+    """GET /platforms returns the known platform brands + groups structure."""
     res = client.get("/platforms")
     assert res.status_code == 200
-    assert set(res.json()["platforms"]) == {"youtube", "tiktok", "instagram", "facebook"}
+    data = res.json()
+    platforms = set(data["platforms"])
+    # Must include the new format keys (subset check — safe for future additions)
+    assert {"youtube_shorts", "tiktok", "instagram_reels", "facebook_reels"}.issubset(platforms)
+    # Must also include backward-compat alias keys
+    assert {"youtube", "instagram", "facebook"}.issubset(platforms)
+    # Must include the grouped structure for the UI picker
+    assert "groups" in data
+    groups = data["groups"]
+    assert set(groups.keys()) == {"tiktok", "youtube", "instagram", "facebook"}
+    # Each group has label, icon, and formats list
+    for brand, grp in groups.items():
+        assert "label" in grp and "icon" in grp and "formats" in grp
+        for fmt in grp["formats"]:
+            assert "key" in fmt and "label" in fmt and "available" in fmt and "default" in fmt
 
 
 def test_render_status_endpoint(client, tmp_db):
@@ -337,3 +351,194 @@ def test_patch_scene_preserves_draft_status(client):
                        json={"voiceover_text": "updated text"})
     assert res.status_code == 200
     assert res.json()["status"] == "draft", "Status must remain draft after scene edit"
+
+
+# ── Platform export tests ─────────────────────────────────────────────────────
+
+def test_export_single_platform_mock(client, tmp_db, tmp_path, monkeypatch):
+    """POST /export/{platform} on a rendered job returns 200 with path and size_kb."""
+    from orchestration.crew import _mock_blueprint
+    monkeypatch.setenv("JOBS_DIR", str(tmp_path / "jobs"))
+    job = _mock_blueprint("export test", "youtube")
+    job["status"] = "done"
+    job["output_path"] = str(tmp_path / "jobs" / job["job_id"] / "output.mp4")
+    tmp_db.save_job(job)
+    res = client.post(f"/jobs/{job['job_id']}/export/youtube")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["platform"] == "youtube"
+    assert "path" in data
+    assert "size_kb" in data
+
+
+def test_export_unknown_platform_rejected(client, tmp_db):
+    """POST /export/{platform} with unknown platform name returns 422."""
+    from orchestration.crew import _mock_blueprint
+    job = _mock_blueprint("export reject test", "youtube")
+    job["status"] = "done"
+    tmp_db.save_job(job)
+    res = client.post(f"/jobs/{job['job_id']}/export/snapchat")
+    assert res.status_code == 422
+
+
+def test_export_all_platforms_mock(client, tmp_db, tmp_path, monkeypatch):
+    """POST /export-all returns exports dict with all known platform keys."""
+    from orchestration.crew import _mock_blueprint
+    from renderer.render import PLATFORMS
+    monkeypatch.setenv("JOBS_DIR", str(tmp_path / "jobs"))
+    job = _mock_blueprint("export all test", "youtube")
+    job["status"] = "done"
+    job["output_path"] = str(tmp_path / "jobs" / job["job_id"] / "output.mp4")
+    tmp_db.save_job(job)
+    res = client.post(f"/jobs/{job['job_id']}/export-all")
+    assert res.status_code == 200
+    exports = res.json()["exports"]
+    # Must include at minimum the 4 original short-form keys
+    assert {"youtube", "tiktok", "instagram", "facebook"}.issubset(set(exports.keys()))
+    for p, info in exports.items():
+        assert info["path"] is not None, f"{p} export path should not be None"
+
+
+def test_download_export_missing_returns_404(client, tmp_db):
+    """GET /export/{platform} before exporting returns 404."""
+    from orchestration.crew import _mock_blueprint
+    job = _mock_blueprint("download missing", "youtube")
+    job["status"] = "done"
+    job["exports"] = {}   # no exports yet
+    tmp_db.save_job(job)
+    res = client.get(f"/jobs/{job['job_id']}/export/youtube")
+    assert res.status_code == 404
+
+
+# ── Bug A: _platform_vf zero-dimension guard ─────────────────────────────────
+
+def test_platform_vf_zero_dimensions_no_crash():
+    """Bug A fix: _platform_vf must not raise ZeroDivisionError on 0-dimension src."""
+    from renderer.render import _platform_vf
+    result = _platform_vf(0, 0, 720, 1280)
+    assert "scale=720:1280" in result
+
+    result2 = _platform_vf(720, 0, 720, 1280)
+    assert "scale=720:1280" in result2
+
+
+# ── Bug C: topic reset on pipeline failure ────────────────────────────────────
+
+def test_wizard_pipeline_failure_resets_topic_to_queued(tmp_db, mock_job):
+    """Bug C fix: if wizard pipeline fails, linked topic is reset from in_progress → queued."""
+    from unittest.mock import patch
+    from dashboard.server import _run_wizard_pipeline
+
+    # Set up a topic in the DB marked in_progress
+    from data.db import create_project, add_topics, update_topic_status, list_topics
+    proj = create_project("test proj", "finance")
+    topics = add_topics(proj["project_id"], [{"title": "test", "hook": "", "why_trending": ""}])
+    tid = topics[0]["topic_id"]
+    update_topic_status(tid, "in_progress")
+
+    mock_job["status"] = "pending"
+    mock_job["topic_id"] = tid
+    tmp_db.save_job(mock_job)
+
+    class FakePayload:
+        topic_title   = "test"
+        platforms     = ["youtube"]
+        niche         = "finance"
+        caption_style = "karaoke"
+        topic_hook    = ""
+        topic_id      = tid
+
+    with patch("orchestration.crew.generate_script", side_effect=RuntimeError("Claude down")):
+        _run_wizard_pipeline(mock_job["job_id"], FakePayload())
+
+    # Topic must be back to queued
+    rows = list_topics(proj["project_id"])
+    assert rows[0]["status"] == "queued", f"Expected queued, got {rows[0]['status']}"
+
+
+# ── Format-selection feature tests ───────────────────────────────────────────
+
+def test_platform_vf_portrait_center_crop():
+    """9:16→4:5 export must center-crop height, not pad."""
+    from renderer.render import _platform_vf
+    vf = _platform_vf(720, 1280, 720, 900)
+    assert "crop" in vf, "4:5 export must use crop, not pad"
+    assert "pad" not in vf, "4:5 export must not letterbox"
+
+
+def test_platform_vf_square_center_crop():
+    """9:16→1:1 export must center-crop height, not pad."""
+    from renderer.render import _platform_vf
+    vf = _platform_vf(720, 1280, 720, 720)
+    assert "crop" in vf
+    assert "pad" not in vf
+
+
+def test_resolved_formats_with_explicit_formats():
+    """Explicit formats= list is used verbatim (filtered to valid keys)."""
+    from dashboard.server import CreateJobPayload
+    p = CreateJobPayload(
+        niche="finance", topic_title="test",
+        platforms=["youtube"],
+        formats=["youtube_shorts", "instagram_square", "made_up_key"]
+    )
+    result = p.resolved_formats()
+    assert "youtube_shorts" in result
+    assert "instagram_square" in result
+    assert "made_up_key" not in result   # invalid key filtered out
+
+
+def test_resolved_formats_defaults_to_brand_default():
+    """No explicit formats → each brand's default format is picked."""
+    from dashboard.server import CreateJobPayload
+    p = CreateJobPayload(
+        niche="finance", topic_title="test",
+        platforms=["youtube", "instagram"],
+        formats=[]
+    )
+    result = p.resolved_formats()
+    assert "youtube_shorts" in result       # youtube default
+    assert "instagram_reels" in result      # instagram default
+    assert "instagram_square" not in result  # not a default
+
+
+def test_create_job_stores_formats(client, tmp_db):
+    """POST /jobs/create with explicit formats stores them on the job."""
+    res = client.post("/jobs/create", json={
+        "niche": "finance",
+        "topic_title": "Format test",
+        "platforms": ["youtube", "instagram"],
+        "formats": ["youtube_shorts", "instagram_reels", "instagram_square"],
+    })
+    assert res.status_code == 200
+    job_id = res.json()["job_id"]
+    from data.db import load_job
+    job = load_job(job_id)
+    assert "formats" in job
+    assert "youtube_shorts" in job["formats"]
+    assert "instagram_square" in job["formats"]
+
+
+def test_create_job_no_formats_defaults(client, tmp_db):
+    """POST /jobs/create without formats= defaults to one format per brand."""
+    res = client.post("/jobs/create", json={
+        "niche": "finance",
+        "topic_title": "Default format test",
+        "platforms": ["tiktok", "facebook"],
+    })
+    assert res.status_code == 200
+    job_id = res.json()["job_id"]
+    from data.db import load_job
+    job = load_job(job_id)
+    assert "formats" in job
+    assert len(job["formats"]) >= 2     # at least one per brand
+    assert "tiktok" in job["formats"]   # tiktok brand → tiktok format
+    assert "facebook_reels" in job["formats"]  # facebook default
+
+
+def test_render_vf_platform_keys():
+    """All PLATFORMS keys produce a valid non-empty _platform_vf string."""
+    from renderer.render import PLATFORMS, _platform_vf
+    for key, (w, h, *_) in PLATFORMS.items():
+        vf = _platform_vf(720, 1280, w, h)
+        assert vf and "scale" in vf, f"No valid vf for {key}: {vf}"

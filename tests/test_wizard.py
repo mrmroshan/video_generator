@@ -119,7 +119,7 @@ def test_wizard_pipeline_partial_timestamps_reaches_review(tmp_db, mock_job):
 
     with patch("orchestration.crew.generate_script",  return_value=mock_job), \
          patch("audio.tts.generate_audio_for_job",    return_value=mock_job), \
-         patch("assets.stock.fetch_broll_for_job",    return_value=mock_job):
+         patch("assets.broll.fetch_broll_for_job",    return_value=mock_job):
         _run_wizard_pipeline(mock_job["job_id"], FakePayload())
 
     loaded = tmp_db.load_job(mock_job["job_id"])

@@ -37,6 +37,7 @@ from data.db import (
     add_topics, list_topics, update_topic_status, delete_topic, get_project_stats,
 )
 from assets.stock import _search_pexels, _download_video
+from renderer.render import VALID_PLATFORMS, PLATFORMS, PLATFORM_GROUPS  # single source of truth
 
 
 @asynccontextmanager
@@ -62,8 +63,6 @@ def get_niches():
     from orchestration.crew import NICHES
     return {"niches": NICHES}
 
-
-VALID_PLATFORMS = {"youtube", "tiktok", "instagram", "facebook"}
 
 
 class TopicsPayload(BaseModel):
@@ -95,13 +94,35 @@ class CreateJobPayload(BaseModel):
     topic_title:    str
     topic_hook:     str = ""
     platforms:      List[str] = ["tiktok", "instagram", "youtube", "facebook"]
+    formats:        List[str] = []   # specific format keys e.g. ["youtube_shorts","instagram_reels","instagram_square"]
     caption_style:  str = "karaoke"
     broll_source:   str = "pexels"   # "pexels" | "veo2"
 
     @property
     def platform(self) -> str:
-        """Primary platform — first in list, used for script style."""
+        """Primary platform brand — first in platforms list, used for script style."""
         return self.platforms[0] if self.platforms else "tiktok"
+
+    def resolved_formats(self) -> List[str]:
+        """
+        Return the final list of format keys to export.
+        If formats were explicitly set, validate and use them.
+        Otherwise, default to the first (default) format for each selected platform brand.
+        """
+        if self.formats:
+            return [f for f in self.formats if f in VALID_PLATFORMS]
+        # Default: pick the default format for each selected platform brand
+        result = []
+        for brand in self.platforms:
+            group = PLATFORM_GROUPS.get(brand)
+            if group:
+                for fmt in group["formats"]:
+                    if fmt["default"] and fmt["available"]:
+                        result.append(fmt["key"])
+                        break
+            elif brand in VALID_PLATFORMS:
+                result.append(brand)  # backward-compat alias
+        return result or ["tiktok"]
 
 
 @app.post("/jobs/create")
@@ -130,11 +151,13 @@ def create_job(payload: CreateJobPayload, background_tasks: BackgroundTasks):
     from datetime import datetime, timezone
     job_id = str(uuid.uuid4())
     platforms = [p.lower() for p in payload.platforms]
+    formats   = payload.resolved_formats()
     job = {
         "job_id":         job_id,
         "status":         "pending",
-        "platform":       platforms[0],    # primary (for script style)
-        "platforms":      platforms,        # all selected (for exports)
+        "platform":       platforms[0],    # primary brand (for script style)
+        "platforms":      platforms,        # selected platform brands
+        "formats":        formats,          # resolved format keys for export
         "niche":          payload.niche,
         "topic":          payload.topic_title,
         "topic_hook":     payload.topic_hook,
@@ -191,6 +214,22 @@ def _run_wizard_pipeline(job_id: str, payload: "CreateJobPayload"):
     platforms = [p.lower() for p in (payload.platforms or ["tiktok"])]
     primary   = platforms[0]
     broll_source = (getattr(payload, "broll_source", "pexels") or "pexels").lower()
+    # Resolve export formats: use explicit formats if set, else default per brand
+    raw_formats = getattr(payload, "formats", []) or []
+    if raw_formats:
+        formats = [f for f in raw_formats if f in VALID_PLATFORMS]
+    else:
+        formats = []
+        for brand in platforms:
+            grp = PLATFORM_GROUPS.get(brand)
+            if grp:
+                for fmt in grp["formats"]:
+                    if fmt["default"] and fmt["available"]:
+                        formats.append(fmt["key"])
+                        break
+            elif brand in VALID_PLATFORMS:
+                formats.append(brand)
+        formats = formats or ["tiktok"]
 
     try:
         # Phase 1 — Script (always Shorts/9:16, primary platform drives rules)
@@ -204,7 +243,8 @@ def _run_wizard_pipeline(job_id: str, payload: "CreateJobPayload"):
         job["topic_hook"]       = payload.topic_hook
         job["caption_style"]    = payload.caption_style
         job["platform"]         = primary
-        job["platforms"]        = platforms   # full list for auto-export
+        job["platforms"]        = platforms   # selected brands
+        job["formats"]          = formats     # resolved format keys
         job["broll_source"]     = broll_source
         job["status"]           = "pending"
         job["progress_phase"]   = "generating_script"
@@ -257,6 +297,16 @@ def _run_wizard_pipeline(job_id: str, payload: "CreateJobPayload"):
         try:
             update_progress(job_id, "failed", str(e)[:200])
             update_status(job_id, "failed")
+        except Exception:
+            pass
+        # Reset linked topic back to queued so user can retry from Topic Bank
+        try:
+            failed_job = load_job(job_id)
+            tid = (failed_job or {}).get("topic_id") or getattr(payload, "topic_id", None)
+            if tid:
+                from data.db import update_topic_status
+                update_topic_status(tid, "queued")
+                print(f"  [TOPIC] Reset topic {tid} → queued (pipeline failed)")
         except Exception:
             pass
 
@@ -579,7 +629,10 @@ def recaption_scene(job_id: str, scene_id: str, payload: CaptionTextPayload):
     """
     import subprocess as _sp
     from renderer.captions import parse_caption_edit, burn_karaoke, burn_captions
-    from renderer.render import JOBS_DIR, _get_audio_duration
+    from renderer.render import _get_audio_duration
+    from pathlib import Path as _Path
+    _root = _Path(__file__).parent.parent
+    _jobs_dir = os.environ.get("JOBS_DIR", str(_root / "data" / "jobs"))
 
     job = load_job(job_id)
     if not job:
@@ -683,14 +736,17 @@ def set_caption_style(job_id: str, payload: CaptionStylePayload):
 
 @app.get("/platforms")
 def get_platforms():
-    from renderer.render import PLATFORMS
+    """Return platform groups with format options for the two-level picker UI."""
     return {
+        # Flat map of all known format keys → specs (backward compat)
         "platforms": {k: {"width": v[0], "height": v[1], "label": v[2], "description": v[3]}
                       for k, v in PLATFORMS.items()},
+        # Grouped structure for the new two-level UI picker
+        "groups": PLATFORM_GROUPS,
         "aliases": {
-            "instagram": ["ig","ig_square","fb_post"],
-            "tiktok":    ["reels","shorts","fb_reels"],
-            "facebook":  ["fb","fb_video"],
+            "instagram": ["ig", "ig_square", "fb_post"],
+            "tiktok":    ["reels", "shorts", "fb_reels"],
+            "facebook":  ["fb", "fb_video"],
         }
     }
 
@@ -787,28 +843,48 @@ def render_job_endpoint(job_id: str, background_tasks: BackgroundTasks):
     def _do_render(job_id: str, job_snapshot: dict):
         try:
             output_path = render_job(job_snapshot)
-            # Auto-export all selected platforms after render
-            # All are 720×1280 Shorts format — export_platform handles any crops
-            platforms = job_snapshot.get("platforms", [job_snapshot.get("platform", "tiktok")])
+            # Auto-export to each selected format after render
+            # formats = resolved format keys (e.g. ["youtube_shorts","instagram_square"])
+            formats = job_snapshot.get("formats") or job_snapshot.get("platforms") or ["tiktok"]
             exports = {}
             try:
                 from renderer.render import export_platform
                 fresh_job = load_job(job_id) or job_snapshot
                 fresh_job["output_path"] = output_path
-                for p in platforms:
+                for fmt in formats:
                     try:
-                        exp_path = export_platform(fresh_job, p)
-                        exports[p] = exp_path
-                        print(f"  [EXPORT] {p} → {exp_path}")
+                        exp_path = export_platform(fresh_job, fmt)
+                        exports[fmt] = exp_path
+                        print(f"  [EXPORT] {fmt} → {exp_path}")
                     except Exception as ex:
-                        print(f"  [WARN] Export failed for {p}: {ex}")
+                        print(f"  [WARN] Export failed for {fmt}: {ex}")
             except Exception as ex:
                 print(f"  [WARN] Auto-export failed: {ex}")
             update_status(job_id, "done", {"output_path": output_path, "exports": exports})
+            # Auto-mark linked topic as published when render completes
+            try:
+                done_job = load_job(job_id) or job_snapshot
+                tid = done_job.get("topic_id")
+                if tid:
+                    from data.db import update_topic_status
+                    update_topic_status(tid, "published", job_id=job_id)
+                    print(f"  [TOPIC] Marked topic {tid} → published")
+            except Exception as ex:
+                print(f"  [WARN] Could not mark topic published: {ex}")
         except Exception as e:
             print(f"[ERROR] Render failed for {job_id}: {e}")
             try:
                 update_status(job_id, "failed")
+            except Exception:
+                pass
+            # Reset linked topic back to queued so user can retry
+            try:
+                failed_job = load_job(job_id) or job_snapshot
+                tid = failed_job.get("topic_id")
+                if tid:
+                    from data.db import update_topic_status
+                    update_topic_status(tid, "queued")
+                    print(f"  [TOPIC] Reset topic {tid} → queued (render failed)")
             except Exception:
                 pass
 
@@ -830,6 +906,7 @@ def render_status(job_id: str):
         "job_id":      job_id,
         "status":      job["status"],
         "output_path": job.get("output_path"),
+        "exports":     job.get("exports", {}),
         "done":        job["status"] == "done",
         "failed":      job["status"] == "failed",
     }
@@ -951,10 +1028,9 @@ def create_project_endpoint(payload: CreateProjectPayload):
         raise HTTPException(422, f"Unknown niche '{payload.niche}'. Choose from: {sorted(NICHES)}")
     if not payload.name.strip():
         raise HTTPException(422, "Project name cannot be empty")
-    VALID_PLATFORMS = {"youtube", "tiktok", "instagram", "facebook"}
-    bad = [p for p in payload.platforms if p not in VALID_PLATFORMS]
+    bad = [p for p in payload.platforms if p.lower() not in VALID_PLATFORMS]
     if bad:
-        raise HTTPException(422, f"Unknown platform(s): {bad}")
+        raise HTTPException(422, f"Unknown platform(s): {bad}. Choose from: {sorted(VALID_PLATFORMS)}")
     project = create_project(
         name=payload.name,
         niche=payload.niche,
@@ -1086,6 +1162,7 @@ def start_video_from_topic(project_id: str, topic_id: str,
         niche         = project["niche"]
         platforms     = project.get("platforms", ["tiktok", "instagram", "youtube", "facebook"])
         caption_style = "karaoke"
+        broll_source  = project.get("broll_source", "pexels")  # honour project preference
         project_id    = _project_id
         topic_id      = _topic_id
 
@@ -1102,6 +1179,7 @@ def start_video_from_topic(project_id: str, topic_id: str,
         "topic":           topic["title"],
         "topic_hook":      topic.get("hook", ""),
         "caption_style":   "karaoke",
+        "broll_source":    project.get("broll_source", "pexels"),  # honour project preference
         "project_id":      project_id,
         "topic_id":        topic_id,
         "created_at":      datetime.now(timezone.utc).isoformat(),

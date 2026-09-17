@@ -17,6 +17,21 @@ def test_make_karaoke_ass_empty_words_no_crash():
     assert "[Script Info]" in result
 
 
+def test_make_karaoke_ass_empty_words_respects_dimensions():
+    """Bug 1 fix: empty-word fallback ASS must use the passed width/height, not hardcoded 1280×720."""
+    result_default = make_karaoke_ass([], total_duration=5.0, width=1280, height=720)
+    assert "PlayResX: 1280" in result_default
+    assert "PlayResY: 720" in result_default
+
+    result_portrait = make_karaoke_ass([], total_duration=5.0, width=1080, height=1920)
+    assert "PlayResX: 1080" in result_portrait
+    assert "PlayResY: 1920" in result_portrait
+
+    result_square = make_karaoke_ass([], total_duration=5.0, width=1080, height=1080)
+    assert "PlayResX: 1080" in result_square
+    assert "PlayResY: 1080" in result_square
+
+
 def test_make_karaoke_ass_whitespace_words_no_crash():
     """All-whitespace words filter to empty — must not crash."""
     result = make_karaoke_ass([{"word": "  ", "start": 0.0, "end": 0.5}], total_duration=5.0)

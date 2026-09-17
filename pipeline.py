@@ -15,7 +15,7 @@ from audio.tts import generate_audio_for_job
 from audio.timestamps import extract_timestamps
 from assets.broll import fetch_broll_for_job
 from data.db import init_db, save_job, update_status, load_job
-from renderer.render import render_job
+from renderer.render import render_job, VALID_PLATFORMS  # single source of truth
 from distribution.publishers.distribute import distribute
 
 
@@ -94,13 +94,13 @@ def run_pipeline(topic: str, platform: str, niche: str = "finance",
 if __name__ == "__main__":
     VALID_NICHES = ["finance", "entrepreneurship", "health", "tech", "mindset",
                     "productivity", "ai", "marketing", "relationships", "fitness"]
-    VALID_PLATFORMS = ["youtube", "tiktok", "instagram", "facebook"]
+    # VALID_PLATFORMS imported from renderer.render — no local copy needed
 
     parser = argparse.ArgumentParser(description="VIDEO MAKER pipeline")
     parser.add_argument("--topic",    required=True, help="Video topic")
-    parser.add_argument("--niche",    choices=VALID_NICHES,    default="finance",
+    parser.add_argument("--niche",    choices=VALID_NICHES,            default="finance",
                         help="Content niche (drives audience/tone/hooks)")
-    parser.add_argument("--platform", choices=VALID_PLATFORMS, default="tiktok",
+    parser.add_argument("--platform", choices=sorted(VALID_PLATFORMS), default="tiktok",
                         help="Primary platform for script style")
     parser.add_argument("--broll-source", choices=["pexels", "veo2"], default="pexels",
                         help="B-roll source: pexels (free, fast) or veo2 (AI-generated, slower)")

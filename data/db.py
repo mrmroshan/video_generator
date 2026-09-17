@@ -27,6 +27,11 @@ def init_db():
                 blueprint  TEXT NOT NULL
             )
         """)
+        # Migration: add formats column if it doesn't exist yet (safe on existing DBs)
+        try:
+            conn.execute("ALTER TABLE jobs ADD COLUMN formats TEXT NOT NULL DEFAULT '[]'")
+        except Exception:
+            pass  # column already exists — ignore
         conn.execute("""
             CREATE TABLE IF NOT EXISTS projects (
                 project_id  TEXT PRIMARY KEY,
@@ -34,10 +39,16 @@ def init_db():
                 niche       TEXT NOT NULL,
                 description TEXT NOT NULL DEFAULT '',
                 platforms   TEXT NOT NULL DEFAULT '["tiktok","instagram","youtube","facebook"]',
+                formats     TEXT NOT NULL DEFAULT '[]',
                 created_at  TEXT NOT NULL,
                 updated_at  TEXT NOT NULL
             )
         """)
+        # Migration: add formats column to projects if it doesn't exist yet
+        try:
+            conn.execute("ALTER TABLE projects ADD COLUMN formats TEXT NOT NULL DEFAULT '[]'")
+        except Exception:
+            pass  # column already exists — ignore
         conn.execute("""
             CREATE TABLE IF NOT EXISTS topics (
                 topic_id      TEXT PRIMARY KEY,

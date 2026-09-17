@@ -12,8 +12,8 @@ import urllib.error
 from pathlib import Path
 
 _ROOT = Path(__file__).parent.parent
-MOCK_APIS = os.getenv("MOCK_APIS", "true").lower() == "true"
-JOBS_DIR = os.getenv("JOBS_DIR", str(_ROOT / "data" / "jobs"))
+# NOTE: MOCK_APIS and JOBS_DIR are read lazily inside functions (os.getenv at call time)
+# so that monkeypatching in tests takes effect. Do NOT cache them at module level.
 
 # ElevenLabs built-in voices (always available, no voices_read permission needed)
 VOICES = {
@@ -40,10 +40,11 @@ def generate_audio_for_job(job: dict, voice: str = DEFAULT_VOICE) -> dict:
     """
     mock = os.getenv("MOCK_APIS", "true").lower() == "true"
     api_key = os.getenv("ELEVENLABS_API_KEY", "")
+    jobs_dir = os.getenv("JOBS_DIR", str(_ROOT / "data" / "jobs"))
 
     for scene in job["scenes"]:
         scene_id = scene["scene_id"]
-        job_dir = os.path.abspath(os.path.join(JOBS_DIR, job['job_id']))
+        job_dir = os.path.abspath(os.path.join(jobs_dir, job['job_id']))
         os.makedirs(job_dir, exist_ok=True)
         audio_path = os.path.join(job_dir, f"{scene_id}.mp3")
 

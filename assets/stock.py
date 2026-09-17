@@ -11,9 +11,9 @@ import urllib.error
 from pathlib import Path
 
 _ROOT = Path(__file__).parent.parent
-MOCK_APIS = os.getenv("MOCK_APIS", "true").lower() == "true"
 PEXELS_API_KEY = os.getenv("PEXELS_API_KEY", "")
-JOBS_DIR = os.getenv("JOBS_DIR", str(_ROOT / "data" / "jobs"))
+# NOTE: MOCK_APIS and JOBS_DIR are read lazily inside functions (os.getenv at call time)
+# so that monkeypatching in tests takes effect. Do NOT cache them at module level.
 
 
 def _ssl_context() -> ssl.SSLContext:
@@ -38,10 +38,11 @@ def fetch_broll_pexels(job: dict) -> dict:
     # Re-read key at call time (supports late env loading)
     api_key = os.getenv("PEXELS_API_KEY", "")
     mock = os.getenv("MOCK_APIS", "true").lower() == "true"
+    jobs_dir = os.getenv("JOBS_DIR", str(_ROOT / "data" / "jobs"))
 
     for scene in job["scenes"]:
         scene_id = scene["scene_id"]
-        job_dir = os.path.abspath(os.path.join(JOBS_DIR, job['job_id']))
+        job_dir = os.path.abspath(os.path.join(jobs_dir, job['job_id']))
         os.makedirs(job_dir, exist_ok=True)
         broll_path = os.path.join(job_dir, f"{scene_id}_broll.mp4")
 

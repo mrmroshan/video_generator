@@ -23,8 +23,9 @@ export default function App() {
   const [niches, setNiches]             = useState({})
   const [nicheError, setNicheError]     = useState(null)
   const [wizardNiche, setWizardNiche]   = useState(null)
-  // Persist platform selection across wizard sessions
+  // Persist platform + format selection across wizard sessions
   const [wizardPlatforms, setWizardPlatforms] = useState(['tiktok','instagram','youtube','facebook'])
+  const [wizardFormats, setWizardFormats]     = useState([])
   const [wizardBrollSource, setWizardBrollSource] = useState('pexels')
   const [generatingJob, setGenJob]      = useState(null)
   const [wizardError, setWizardError]   = useState(null)
@@ -82,9 +83,10 @@ export default function App() {
     setStep(STEP.NICHE)
   }
 
-  const handleNicheSelect = (nicheKey, platforms, brollSource = 'pexels') => {
+  const handleNicheSelect = (nicheKey, platforms, brollSource = 'pexels', formats = []) => {
     setWizardNiche(nicheKey)
     setWizardPlatforms(platforms)
+    setWizardFormats(formats)
     setWizardBrollSource(brollSource)
     setStep(STEP.TOPIC)
   }
@@ -96,7 +98,7 @@ export default function App() {
       const res = await fetch('/api/jobs/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...params, broll_source: wizardBrollSource }),
+        body: JSON.stringify({ ...params, broll_source: wizardBrollSource, formats: wizardFormats }),
       })
       if (!res.ok) throw new Error(await res.text())
       const { job_id } = await res.json()
@@ -239,9 +241,9 @@ export default function App() {
           <TopicBank
             project={activeProject}
             onBack={() => setStep(STEP.PROJECTS)}
-            onStartVideo={(jobId, topic) => {
-              // Navigate to job list so user can monitor/review the new job
-              setStep(STEP.LIST)
+            onStartVideo={(jobId) => {
+              // Navigate to the new job's review screen directly
+              handleSelectJob(jobId)
             }}
           />
         )}

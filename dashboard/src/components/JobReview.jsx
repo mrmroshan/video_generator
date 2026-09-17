@@ -4,6 +4,88 @@ import Timeline from './Timeline.jsx'
 import CaptionStylePicker from './CaptionStylePicker.jsx'
 import { formatDistanceToNow } from '../utils/time.js'
 
+// ── Per-format download panel ────────────────────────────────────────────────
+const FORMAT_META = {
+  tiktok:             { icon: '🎵', label: 'TikTok',             desc: '9:16' },
+  youtube_shorts:     { icon: '▶️', label: 'YouTube Shorts',     desc: '9:16' },
+  instagram_reels:    { icon: '📸', label: 'Instagram Reels',    desc: '9:16' },
+  instagram_square:   { icon: '📸', label: 'Instagram Square',   desc: '1:1'  },
+  instagram_portrait: { icon: '📸', label: 'Instagram Portrait', desc: '4:5'  },
+  facebook_reels:     { icon: '👥', label: 'Facebook Reels',     desc: '9:16' },
+  facebook_square:    { icon: '👥', label: 'Facebook Square',    desc: '1:1'  },
+  // backward-compat aliases
+  youtube:   { icon: '▶️', label: 'YouTube',   desc: '9:16' },
+  instagram: { icon: '📸', label: 'Instagram', desc: '9:16' },
+  facebook:  { icon: '👥', label: 'Facebook',  desc: '9:16' },
+}
+
+function FormatDownloads({ job }) {
+  const [exporting, setExporting] = useState({})   // fmtKey → true while running
+  const [exports, setExports]     = useState(job.exports || {})
+
+  // Keep in sync when job prop updates (e.g. after render completes)
+  useEffect(() => { setExports(job.exports || {}) }, [job.exports])
+
+  // The formats this job should have (use job.formats if set, else fall back to job.platforms)
+  const formats = (job.formats && job.formats.length > 0)
+    ? job.formats
+    : (job.platforms || [job.platform || 'tiktok'])
+
+  const triggerExport = async (fmt) => {
+    if (exporting[fmt]) return
+    setExporting(e => ({ ...e, [fmt]: true }))
+    try {
+      const res = await fetch(`/api/jobs/${job.job_id}/export/${fmt}`, { method: 'POST' })
+      if (!res.ok) throw new Error(await res.text())
+      const data = await res.json()
+      setExports(e => ({ ...e, [fmt]: data.path }))
+    } catch (err) {
+      alert(`Export failed for ${fmt}: ${err.message}`)
+    } finally {
+      setExporting(e => ({ ...e, [fmt]: false }))
+    }
+  }
+
+  if (!formats.length) return null
+
+  return (
+    <div className="format-downloads">
+      <div className="format-downloads-label">📥 Downloads</div>
+      <div className="format-downloads-grid">
+        {formats.map(fmt => {
+          const meta    = FORMAT_META[fmt] || { icon: '🎬', label: fmt, desc: '' }
+          const hasFile = !!exports[fmt]
+          const busy    = !!exporting[fmt]
+          return (
+            <div key={fmt} className={`format-download-card${hasFile ? ' ready' : ''}`}>
+              <span className="fdc-icon">{meta.icon}</span>
+              <span className="fdc-label">{meta.label}</span>
+              <span className="fdc-desc">{meta.desc}</span>
+              {hasFile ? (
+                <a
+                  className="btn-fmt-download"
+                  href={`/api/jobs/${job.job_id}/export/${fmt}`}
+                  download
+                >
+                  ⬇ Download
+                </a>
+              ) : (
+                <button
+                  className="btn-fmt-export"
+                  onClick={() => triggerExport(fmt)}
+                  disabled={busy}
+                >
+                  {busy ? '⏳ Exporting…' : '⬇ Export'}
+                </button>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ── Publish Copy Panel ────────────────────────────────────────────────────────
 const COPY_FIELDS = [
   { key: 'hook_line',           label: '🎯 Hook Line',             mono: false },
@@ -158,6 +240,8 @@ export default function JobReview({ job, onBack, onUpdate }) {
               alert('Render timed out — check server logs.')
               return
             }
+            // Fetch full job — render-status now includes exports so the
+            // download buttons appear immediately without a second round-trip race
             const jr = await fetch(`/api/jobs/${job.job_id}`)
             if (jr.ok) onUpdate(await jr.json())
           }
@@ -193,11 +277,7 @@ export default function JobReview({ job, onBack, onUpdate }) {
         </div>
 
         <div className="review-actions">
-          {rendered ? (
-            <a className="btn-download" href={`/api/jobs/${job.job_id}/output`} download>
-              ⬇ Download MP4
-            </a>
-          ) : locked ? (
+          {rendered ? null : locked ? (
             <button className="btn-render" onClick={render} disabled={rendering}>
               {rendering ? '⏳ Rendering… (checking every 3s)' : '🎬 Render MP4'}
             </button>
@@ -219,6 +299,11 @@ export default function JobReview({ job, onBack, onUpdate }) {
               </button>
             </>
           )}
+          {locked && !rendered && (
+            <button className="btn-render" onClick={render} disabled={rendering}>
+              {rendering ? '⏳ Rendering… (checking every 3s)' : '🎬 Render MP4'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -227,6 +312,9 @@ export default function JobReview({ job, onBack, onUpdate }) {
 
       {/* ── Publish Copy ──────────────────────────────────────────── */}
       {job.publish_copy && <PublishCopyPanel copy={job.publish_copy} hashtags={job.hashtags} />}
+
+      {/* ── Per-format downloads (shown once rendered) ────────────── */}
+      {rendered && <FormatDownloads job={job} />}
 
       {/* ── Timeline ─────────────────────────────────────────────── */}
       <Timeline

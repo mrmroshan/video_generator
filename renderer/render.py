@@ -11,12 +11,19 @@ PLATFORM SIZES (all from a single master 720×1280 render):
   youtube, tiktok, instagram, facebook — all identical dimensions.
   One master render, copied to all selected platforms (no crop).
 
+  NOTE: Master stays at 720p (baseline level 3.1 cap = ~3600 macroblocks).
+  Upgrading to 1080p requires -level 4.0+ — tracked as future work.
+
 Karaoke sync fix:
   We used to run Whisper on the original MP3, which has a 25ms start_time
   offset AND accumulates an AAC encoder delay (~23ms) during compose.
   We now extract audio directly from the composed MP4 (after encoding) and
   run Whisper on that — the timestamps are guaranteed to match the encoded
   video timeline perfectly.
+
+SINGLE SOURCE OF TRUTH:
+  VALID_PLATFORMS — import this everywhere instead of redefining locally.
+  PLATFORMS       — full spec dict for export. Add new formats here only.
 """
 import os
 import json
@@ -32,12 +39,58 @@ DEFAULT_CAPTION_STYLE = "clean"
 # ── Platform specs ────────────────────────────────────────────────────
 # Each entry: (width, height, label, description)
 PLATFORMS = {
-    # All platforms now export as Shorts/Reels — 9:16 vertical (720×1280).
-    # One master render, copied to all selected platforms (no per-platform crop).
-    "youtube":   (720,  1280, "YouTube",          "9:16 vertical — YouTube Shorts"),
-    "tiktok":    (720,  1280, "TikTok",           "9:16 vertical — TikTok video"),
-    "instagram": (720,  1280, "Instagram",        "9:16 vertical — Instagram Reels"),
-    "facebook":  (720,  1280, "Facebook",         "9:16 vertical — Facebook Reels"),
+    # ── Short-form vertical (9:16) — all derived from 720×1280 master ──
+    "tiktok":             (720, 1280, "TikTok",             "9:16 · Vertical"),
+    "youtube_shorts":     (720, 1280, "YouTube Shorts",     "9:16 · Shorts"),
+    "instagram_reels":    (720, 1280, "Instagram Reels",    "9:16 · Reels"),
+    "facebook_reels":     (720, 1280, "Facebook Reels",     "9:16 · Reels"),
+    # ── Square (1:1) — center-crop from 720×1280 master ────────────────
+    "instagram_square":   (720,  720, "Instagram Square",   "1:1 · Feed"),
+    "facebook_square":    (720,  720, "Facebook Square",    "1:1 · Feed"),
+    # ── Portrait (4:5) — center-crop from 720×1280 master ──────────────
+    "instagram_portrait": (720,  900, "Instagram Portrait", "4:5 · Feed"),
+    # ── Backward-compat aliases — kept so existing jobs don't break ─────
+    "youtube":   (720, 1280, "YouTube",   "9:16 · Shorts"),
+    "instagram": (720, 1280, "Instagram", "9:16 · Reels"),
+    "facebook":  (720, 1280, "Facebook",  "9:16 · Reels"),
+}
+
+# SINGLE SOURCE OF TRUTH: import this from render.py everywhere.
+# Never redefine VALID_PLATFORMS in server.py, pipeline.py, or tests.
+VALID_PLATFORMS: frozenset = frozenset(PLATFORMS.keys())
+
+# ── Platform groups (used by /api/platforms for the UI picker) ─────────
+# Each group = one platform brand; each format = one exportable size.
+# available=False → shown in UI as "Coming soon" (grayed out).
+PLATFORM_GROUPS: dict = {
+    "tiktok": {
+        "label": "TikTok", "icon": "🎵",
+        "formats": [
+            {"key": "tiktok",         "label": "Vertical",  "desc": "9:16 · Vertical",    "available": True,  "default": True},
+        ],
+    },
+    "youtube": {
+        "label": "YouTube", "icon": "▶️",
+        "formats": [
+            {"key": "youtube_shorts", "label": "Shorts",    "desc": "9:16 · Shorts",       "available": True,  "default": True},
+            {"key": "youtube_long",   "label": "Long-form", "desc": "16:9 · Main channel", "available": False, "default": False},
+        ],
+    },
+    "instagram": {
+        "label": "Instagram", "icon": "📸",
+        "formats": [
+            {"key": "instagram_reels",    "label": "Reels",    "desc": "9:16 · Reels", "available": True,  "default": True},
+            {"key": "instagram_square",   "label": "Square",   "desc": "1:1 · Feed",   "available": True,  "default": False},
+            {"key": "instagram_portrait", "label": "Portrait", "desc": "4:5 · Feed",   "available": True,  "default": False},
+        ],
+    },
+    "facebook": {
+        "label": "Facebook", "icon": "👥",
+        "formats": [
+            {"key": "facebook_reels",  "label": "Reels",   "desc": "9:16 · Reels", "available": True,  "default": True},
+            {"key": "facebook_square", "label": "Square",  "desc": "1:1 · Feed",   "available": True,  "default": False},
+        ],
+    },
 }
 
 # Aliases: any of these map to the canonical platform key
@@ -56,11 +109,12 @@ def _canonical_platform(name: str) -> str:
 
 def render_job(job: dict, caption_style: str = None) -> str:
     """Render approved job → master output.mp4. Returns path."""
+    _mock = os.getenv("MOCK_APIS", "true").lower() == "true"
     if job["status"] != "approved":
         raise PermissionError(
             f"Job {job['job_id']} is not approved (status={job['status']}). Cannot render."
         )
-    if MOCK_APIS:
+    if _mock:
         job_dir = os.path.join(JOBS_DIR, job["job_id"])
         os.makedirs(job_dir, exist_ok=True)
         out = os.path.join(job_dir, "output.mp4")
@@ -81,6 +135,15 @@ def export_platform(job: dict, platform: str) -> str:
         raise ValueError(f"Unknown platform: {platform}")
 
     job_dir = os.path.join(JOBS_DIR, job["job_id"])
+
+    # Mock mode: evaluate lazily so monkeypatched env vars in tests take effect
+    if os.getenv("MOCK_APIS", "true").lower() == "true":
+        out = os.path.join(job_dir, f"output_{platform}.mp4")
+        os.makedirs(job_dir, exist_ok=True)
+        with open(out, "wb") as f:
+            f.write(b"MOCK_EXPORT_" + platform.encode())
+        print(f"[MOCK] Exported {platform} → {out}")
+        return out
     # Use the uncaptioned master for cropping so we can burn correct-sized captions
     master_nocap = os.path.join(job_dir, "output_nocap.mp4")
     master       = os.path.join(job_dir, "output.mp4")
@@ -203,11 +266,20 @@ def _platform_vf(src_w: int, src_h: int, dst_w: int, dst_h: int) -> str:
     """
     Build an ffmpeg -vf string that converts src to dst dimensions.
     Strategy:
-      - Same AR: just scale
-      - Wider src (landscape→portrait): scale to height, crop width (centre)
-      - Taller src (portrait→landscape): scale to width, pad height (black bars)
-      - Square target: scale to longest side, pad shorter side
+      - Same AR (within 2%): just scale
+      - Src wider than dst (landscape→portrait or landscape→square):
+          scale to match height, then centre-crop width
+      - Src taller than dst (portrait→square or portrait→landscape):
+          scale to match width, then centre-crop height  ← key fix for 9:16→1:1
+      - Exact same size: passthrough scale
+
+    Centre-crop ensures the subject stays centred in the frame — critical
+    for captions (always at the bottom third) not getting cut off.
     """
+    # Guard: ffprobe can return 0 on corrupt/stub files — fall back to scale only
+    if src_h == 0 or src_w == 0:
+        return f"scale={dst_w}:{dst_h}"
+
     src_ar = src_w / src_h
     dst_ar = dst_w / dst_h
 
@@ -216,22 +288,17 @@ def _platform_vf(src_w: int, src_h: int, dst_w: int, dst_h: int) -> str:
         return f"scale={dst_w}:{dst_h}"
 
     if src_ar > dst_ar:
-        # Src is wider than dst (e.g. 16:9 → 9:16 or 1:1)
-        # Scale to match height, then centre-crop to width
-        scale_h = dst_h
-        scale_w = -2  # keep AR
+        # Src wider than dst → scale to dst height, centre-crop width
         return (
-            f"scale={scale_w}:{scale_h},"
+            f"scale=-2:{dst_h},"
             f"crop={dst_w}:{dst_h}"
         )
     else:
-        # Src is taller than dst (e.g. 9:16 → 16:9)
-        # Scale to match width, letterbox (pad) to height
-        scale_w = dst_w
-        scale_h = -2
+        # Src taller than dst (e.g. 9:16 → 1:1 or 9:16 → 4:5)
+        # Scale to dst width, then centre-crop height to keep the middle of the frame
         return (
-            f"scale={scale_w}:{scale_h},"
-            f"pad={dst_w}:{dst_h}:(ow-iw)/2:(oh-ih)/2:black"
+            f"scale={dst_w}:-2,"
+            f"crop={dst_w}:{dst_h}"
         )
 
 
