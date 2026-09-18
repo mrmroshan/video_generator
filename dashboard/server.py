@@ -95,7 +95,7 @@ class CreateJobPayload(BaseModel):
     topic_hook:     str = ""
     platforms:      List[str] = ["tiktok", "instagram", "youtube", "facebook"]
     formats:        List[str] = []   # specific format keys e.g. ["youtube_shorts","instagram_reels","instagram_square"]
-    caption_style:  str = "karaoke"
+    caption_style:  str = "none"
     broll_source:   str = "pexels"   # "pexels" | "veo2"
 
     @property

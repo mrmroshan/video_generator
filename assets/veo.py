@@ -274,7 +274,7 @@ def fetch_broll_veo2(job: dict) -> dict:
     job_dir = os.path.abspath(os.path.join(JOBS_DIR, job["job_id"]))
     os.makedirs(job_dir, exist_ok=True)
 
-    for scene in job.get("scenes", []):
+    for scene_idx, scene in enumerate(job.get("scenes", [])):
         scene_id   = scene["scene_id"]
         broll_path = os.path.join(job_dir, f"{scene_id}_broll.mp4")
         raw_prompt = scene.get("broll_prompt", "cinematic environment, 9:16 vertical")
@@ -286,22 +286,43 @@ def fetch_broll_veo2(job: dict) -> dict:
 
         print(f"  [VEO3.1] {scene_id} prompt: {final[:100]}...")
 
-        try:
-            generate_clip(final, broll_path, best_of=2)
-            scene["broll_path"]        = broll_path
-            scene["broll_source"]      = "veo3.1"
-            scene["broll_prompt_used"] = final
-            scene["broll_meta"]        = {
-                "source": "veo3.1",
-                "model":  VEO_MODEL,
-                "best_of": 2,
-                "original_prompt": raw_prompt,
-                "safe_prompt": final,
-            }
-        except Exception as e:
-            print(f"  [WARN] Veo 3.1 failed for {scene_id}: {e}")
+        # Retry up to 3× with back-off on rate limit (429)
+        last_err = None
+        for attempt in range(3):
+            try:
+                if attempt > 0:
+                    wait = 30 * attempt
+                    print(f"  [VEO3.1] retry {attempt}/2 for {scene_id} — waiting {wait}s...")
+                    time.sleep(wait)
+                generate_clip(final, broll_path, best_of=2)
+                scene["broll_path"]        = broll_path
+                scene["broll_source"]      = "veo3.1"
+                scene["broll_prompt_used"] = final
+                scene["broll_meta"]        = {
+                    "source": "veo3.1",
+                    "model":  VEO_MODEL,
+                    "best_of": 2,
+                    "original_prompt": raw_prompt,
+                    "safe_prompt": final,
+                }
+                last_err = None
+                break
+            except Exception as e:
+                last_err = e
+                if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                    print(f"  [WARN] Veo rate limit on {scene_id} (attempt {attempt+1}/3): {str(e)[:80]}")
+                    continue
+                # Non-rate-limit error — no retry
+                break
+
+        if last_err:
+            print(f"  [WARN] Veo 3.1 failed for {scene_id}: {last_err}")
             scene["broll_path"]   = None
             scene["broll_source"] = "veo_failed"
-            scene["broll_meta"]   = {"source": "veo_failed", "reason": str(e)}
+            scene["broll_meta"]   = {"source": "veo_failed", "reason": str(last_err)}
+
+        # Small inter-scene delay to avoid burst rate limits
+        if scene_idx < len(job.get("scenes", [])) - 1:
+            time.sleep(5)
 
     return job

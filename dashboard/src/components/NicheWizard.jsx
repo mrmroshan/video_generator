@@ -54,6 +54,7 @@ export default function NicheWizard({ niches, defaultPlatforms = ['tiktok', 'ins
     defaultFormatsFor(defaultPlatforms, DEFAULT_GROUPS)
   )
   const [brollSource, setBrollSource]   = useState('pexels')
+  const [captionsOn, setCaptionsOn]     = useState(false)
 
   const hasNiches = Object.keys(niches).length > 0
 
@@ -253,6 +254,22 @@ export default function NicheWizard({ niches, defaultPlatforms = ['tiktok', 'ins
             <span className="broll-option-desc">AI-generated · ~3-7 min · ~$2.50/video</span>
           </label>
         </div>
+
+        {/* ── Captions toggle ───────────────────────────────────────── */}
+        <div className="captions-toggle-row">
+          <span className="captions-toggle-label">📝 Captions</span>
+          <label className="toggle-switch">
+            <input
+              type="checkbox"
+              checked={captionsOn}
+              onChange={e => setCaptionsOn(e.target.checked)}
+            />
+            <span className="toggle-slider" />
+          </label>
+          <span className="captions-toggle-hint">
+            {captionsOn ? 'On — cinematic style' : 'Off'}
+          </span>
+        </div>
       </div>
 
       {!hasNiches ? (
@@ -268,7 +285,7 @@ export default function NicheWizard({ niches, defaultPlatforms = ['tiktok', 'ins
               key={key}
               className="niche-card"
               style={{ '--niche-color': niche.color }}
-              onClick={() => onSelect(key, [...activeBrands], brollSource, selFormats)}
+              onClick={() => onSelect(key, [...activeBrands], brollSource, selFormats, captionsOn ? 'cinematic' : 'none')}
             >
               <span className="niche-icon">{niche.icon}</span>
               <span className="niche-label">{niche.label}</span>

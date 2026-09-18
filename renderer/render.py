@@ -34,7 +34,7 @@ _ROOT     = Path(__file__).parent.parent
 JOBS_DIR  = os.getenv("JOBS_DIR",  str(_ROOT / "data" / "jobs"))
 MOCK_APIS = os.getenv("MOCK_APIS", "true").lower() == "true"
 
-DEFAULT_CAPTION_STYLE = "clean"
+DEFAULT_CAPTION_STYLE = "none"
 
 # ── Platform specs ────────────────────────────────────────────────────
 # Each entry: (width, height, label, description)
@@ -185,18 +185,17 @@ def export_platform(job: dict, platform: str) -> str:
     if r.returncode != 0:
         raise RuntimeError(f"Crop failed for {platform}:\n{r.stderr[-400:]}")
 
-    # Step 2: burn captions sized for this exact resolution
-    caption_style = job.get("caption_style", "karaoke")
-    use_karaoke   = caption_style.startswith("karaoke")
+    # Step 2: burn captions sized for this exact resolution (skip if none)
+    caption_style = job.get("caption_style", "none")
+    use_captions  = caption_style != "none"
+    use_karaoke   = use_captions and caption_style.startswith("karaoke")
 
     if use_karaoke and any(s.get("timestamps") for s in job.get("scenes", [])):
-        # Rebuild per-platform karaoke: concatenate all scene timestamp lists
-        # with cumulative offsets matching the cropped video timeline
         _burn_karaoke_platform(job, out_crop, out, w, h, caption_style)
         try: os.unlink(out_crop)
         except: pass
     else:
-        # Static captions or no timestamps — simple rename
+        # No captions or static — just use the cropped file as-is
         os.replace(out_crop, out)
 
     sz = os.path.getsize(out) // 1024
@@ -318,6 +317,21 @@ def _get_audio_duration(path: str) -> float:
     return 5.0
 
 
+def _get_video_duration(path: str) -> float:
+    """Return duration of the first video stream in seconds (0.0 on failure)."""
+    r = subprocess.run(
+        ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_streams", path],
+        capture_output=True, text=True,
+    )
+    try:
+        for s in json.loads(r.stdout).get("streams", []):
+            if s.get("codec_type") == "video" and "duration" in s:
+                return float(s["duration"])
+    except (json.JSONDecodeError, ValueError, KeyError):
+        pass
+    return 0.0
+
+
 def _extract_wav_from_composed(composed_path: str, wav_path: str):
     """Extract PCM WAV from the composed MP4 — Whisper timestamps will perfectly match."""
     r = subprocess.run([
@@ -348,7 +362,8 @@ def _render_ffmpeg(job: dict, caption_style: str = None) -> str:
     # Master always renders at 720×1280 (9:16 vertical — Shorts/Reels format)
     # Platform-specific exports happen via export_platform() — most get the same file
     width, height = 720, 1280
-    use_karaoke = style.startswith("karaoke")
+    use_captions = style != "none"
+    use_karaoke  = use_captions and style.startswith("karaoke")
 
     scene_files = []
 
@@ -365,18 +380,24 @@ def _render_ffmpeg(job: dict, caption_style: str = None) -> str:
         audio_dur = _get_audio_duration(ap)
         composed  = os.path.join(job_dir, f"{sid}_composed.mp4")
 
+        # Probe broll duration — loop if shorter than audio
+        broll_dur = _get_video_duration(bp)
+        need_loop = broll_dur > 0 and broll_dur < audio_dur
+
         # ── Step 1: compose ──────────────────────────────────────────
-        print(f"  {sid} compose ({audio_dur:.2f}s)...", end=" ", flush=True)
+        print(f"  {sid} compose ({audio_dur:.2f}s, broll={broll_dur:.1f}s{'→loop' if need_loop else ''})...", end=" ", flush=True)
+
+        video_input = ["-stream_loop", "-1", "-i", bp] if need_loop else ["-i", bp]
+
         r = subprocess.run([
             "ffmpeg", "-y",
-            "-i", bp, "-i", ap,
+            *video_input, "-i", ap,
             "-t", f"{audio_dur:.3f}",
             "-vf", f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}",
             "-map", "0:v:0", "-map", "1:a:0",
             "-c:v", "libx264", "-profile:v", "baseline", "-level", "3.1",
             "-preset", "fast", "-crf", "22",
             "-c:a", "aac", "-b:a", "128k",
-            "-shortest",
             composed,
         ], capture_output=True, text=True)
         if r.returncode != 0:
@@ -400,11 +421,14 @@ def _render_ffmpeg(job: dict, caption_style: str = None) -> str:
                 print(f"[WARN Whisper: {e}]", end=" ", flush=True)
                 use_karaoke = False
 
-        # ── Step 4: burn captions ────────────────────────────────────
+        # ── Step 4: burn captions (skipped when style=="none") ───────
         captioned = os.path.join(job_dir, f"{sid}_captioned.mp4")
-        if use_karaoke and scene.get("timestamps"):
+        if not use_captions:
+            # No captions — use composed directly
+            import shutil
+            shutil.copy2(composed, captioned)
+        elif use_karaoke and scene.get("timestamps"):
             from renderer.captions import burn_karaoke
-            # No audio_offset needed — WAV was extracted from composed, ts=0 aligned
             burn_karaoke(composed, scene["timestamps"], audio_dur,
                          style=style, out_path=captioned,
                          audio_path=None, width=width, height=height)

@@ -27,6 +27,7 @@ export default function App() {
   const [wizardPlatforms, setWizardPlatforms] = useState(['tiktok','instagram','youtube','facebook'])
   const [wizardFormats, setWizardFormats]     = useState([])
   const [wizardBrollSource, setWizardBrollSource] = useState('pexels')
+  const [wizardCaptionStyle, setWizardCaptionStyle] = useState('none')
   const [generatingJob, setGenJob]      = useState(null)
   const [wizardError, setWizardError]   = useState(null)
   const [createLoading, setCreateLoading] = useState(false)
@@ -83,11 +84,12 @@ export default function App() {
     setStep(STEP.NICHE)
   }
 
-  const handleNicheSelect = (nicheKey, platforms, brollSource = 'pexels', formats = []) => {
+  const handleNicheSelect = (nicheKey, platforms, brollSource = 'pexels', formats = [], captionStyle = 'none') => {
     setWizardNiche(nicheKey)
     setWizardPlatforms(platforms)
     setWizardFormats(formats)
     setWizardBrollSource(brollSource)
+    setWizardCaptionStyle(captionStyle)
     setStep(STEP.TOPIC)
   }
 
@@ -98,7 +100,7 @@ export default function App() {
       const res = await fetch('/api/jobs/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...params, broll_source: wizardBrollSource, formats: wizardFormats }),
+        body: JSON.stringify({ ...params, broll_source: wizardBrollSource, formats: wizardFormats, caption_style: wizardCaptionStyle }),
       })
       if (!res.ok) throw new Error(await res.text())
       const { job_id } = await res.json()
