@@ -79,9 +79,18 @@ def generate_audio_for_job(job: dict, voice: str = DEFAULT_VOICE) -> dict:
                 print(f"✓ Audio [{scene_id}] — {voice} — {chars} chars — {size:,} bytes")
             except RuntimeError as e:
                 err = str(e)
-                if "429" in err:
-                    print(f"  [ERROR] {scene_id}: ElevenLabs quota exceeded (429) — stopping TTS")
-                    raise
+                quota_hit = "quota_exceeded" in err or "429" in err or "401" in err
+                if quota_hit:
+                    print(f"  [WARN] {scene_id}: ElevenLabs quota — falling back to edge-tts")
+                    try:
+                        _call_edge_tts(text=scene["voiceover_text"], output_path=audio_path)
+                        size = os.path.getsize(audio_path)
+                        scene["audio_path"] = audio_path
+                        scene["audio_meta"] = {"source": "edge_tts", "chars": chars, "size_bytes": size}
+                        print(f"✓ Audio [{scene_id}] — edge-tts fallback — {chars} chars")
+                        continue
+                    except Exception as e2:
+                        print(f"  [ERROR] {scene_id}: edge-tts fallback also failed: {e2}")
                 print(f"  [WARN] {scene_id}: TTS failed ({err}) — skipping scene")
                 scene["audio_path"] = None
                 scene["audio_meta"] = {"source": "failed", "error": err}
@@ -131,3 +140,20 @@ def _call_elevenlabs(text: str, output_path: str, voice_id: str, api_key: str):
 def list_available_voices() -> dict:
     """Return the built-in voice name → ID mapping."""
     return dict(VOICES)
+
+
+def _call_edge_tts(text: str, output_path: str, voice: str = "en-US-GuyNeural") -> None:
+    """Generate TTS audio using Microsoft Edge TTS (free, no quota).
+
+    Uses the edge-tts package which streams from Microsoft's neural TTS.
+    Voice 'en-US-GuyNeural' is a deep, clear male voice good for motivational content.
+    Output is saved as MP3 to output_path.
+    """
+    import asyncio
+    import edge_tts
+
+    async def _run():
+        communicate = edge_tts.Communicate(text, voice)
+        await communicate.save(output_path)
+
+    asyncio.run(_run())
