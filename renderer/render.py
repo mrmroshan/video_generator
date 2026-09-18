@@ -492,11 +492,10 @@ def _render_ffmpeg(job: dict, caption_style: str = None) -> str:
         ["ffmpeg", "-y",
          "-f", "concat", "-safe", "0",
          "-i", concat_file,
-         "-vf", "setpts=N/FRAME_RATE/TB",
-         "-af", "aselect=1,asetpts=N/SR/TB",
          "-c:v", "libx264", "-profile:v", "baseline", "-level", "3.1",
          "-preset", "fast", "-crf", "22",
          "-c:a", "aac", "-b:a", "128k",
+         "-movflags", "+faststart",
          output],
         capture_output=True, text=True,
     )
