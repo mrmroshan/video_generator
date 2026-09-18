@@ -1,0 +1,182 @@
+[
+  {
+    "i": 0,
+    "tag": "button",
+    "type": "",
+    "text": "Start over",
+    "placeholder": "",
+    "name": "",
+    "id": "reset",
+    "cls": "btn ghost sm"
+  },
+  {
+    "i": 1,
+    "tag": "textarea",
+    "type": "",
+    "text": "",
+    "placeholder": "Exemple : Le gouvernement étudie une réforme des avantages accordés à vie aux anciens présidents de la République : voiture avec chauffeur, protection policière, bureau et collaborateurs financés par l'État…",
+    "name": "",
+    "id": "desc",
+    "cls": ""
+  },
+  {
+    "i": 2,
+    "tag": "button",
+    "type": "",
+    "text": "Write 4 headlines",
+    "placeholder": "",
+    "name": "",
+    "id": "gen-heads",
+    "cls": "btn"
+  },
+  {
+    "i": 3,
+    "tag": "button",
+    "type": "",
+    "text": "Skip — I'll write my own",
+    "placeholder": "",
+    "name": "",
+    "id": "skip-ai",
+    "cls": "btn ghost sm"
+  },
+  {
+    "i": 4,
+    "tag": "textarea",
+    "type": "",
+    "text": "",
+    "placeholder": "",
+    "name": "",
+    "id": "manual-prompt",
+    "cls": ""
+  },
+  {
+    "i": 5,
+    "tag": "button",
+    "type": "",
+    "text": "",
+    "placeholder": "",
+    "name": "",
+    "id": "copy-manual",
+    "cls": "btn ghost sm"
+  },
+  {
+    "i": 6,
+    "tag": "a",
+    "type": "",
+    "text": "",
+    "placeholder": "",
+    "name": "",
+    "id": "",
+    "cls": "btn ghost sm"
+  },
+  {
+    "i": 7,
+    "tag": "textarea",
+    "type": "",
+    "text": "",
+    "placeholder": "Paste the four headlines here. Numbering, bullets and quotes are fine — they get cleaned up.",
+    "name": "",
+    "id": "manual-paste",
+    "cls": ""
+  },
+  {
+    "i": 8,
+    "tag": "button",
+    "type": "",
+    "text": "",
+    "placeholder": "",
+    "name": "",
+    "id": "use-manual",
+    "cls": "btn"
+  },
+  {
+    "i": 51,
+    "tag": "button",
+    "type": "",
+    "text": "Download PNG",
+    "placeholder": "",
+    "name": "",
+    "id": "download",
+    "cls": "btn"
+  },
+  {
+    "i": 52,
+    "tag": "button",
+    "type": "",
+    "text": "JPG",
+    "placeholder": "",
+    "name": "",
+    "id": "download-jpg",
+    "cls": "btn ghost"
+  },
+  {
+    "i": 54,
+    "tag": "button",
+    "type": "",
+    "text": "▶",
+    "placeholder": "",
+    "name": "",
+    "id": "music-play",
+    "cls": "btn ghost sm"
+  },
+  {
+    "i": 55,
+    "tag": "button",
+    "type": "",
+    "text": "Browse",
+    "placeholder": "",
+    "name": "",
+    "id": "music-browse",
+    "cls": "btn ghost sm"
+  },
+  {
+    "i": 57,
+    "tag": "button",
+    "type": "",
+    "text": "✕",
+    "placeholder": "",
+    "name": "",
+    "id": "music-clear",
+    "cls": "btn ghost sm"
+  },
+  {
+    "i": 58,
+    "tag": "input",
+    "type": "range",
+    "text": "80",
+    "placeholder": "",
+    "name": "",
+    "id": "music-vol",
+    "cls": ""
+  },
+  {
+    "i": 59,
+    "tag": "input",
+    "type": "checkbox",
+    "text": "on",
+    "placeholder": "",
+    "name": "",
+    "id": "music-fade",
+    "cls": ""
+  },
+  {
+    "i": 60,
+    "tag": "button",
+    "type": "",
+    "text": "🎵 MP4 with music",
+    "placeholder": "",
+    "name": "",
+    "id": "download-mp4-audio",
+    "cls": "btn"
+  },
+  {
+    "i": 61,
+    "tag": "button",
+    "type": "",
+    "text": "🔇 MP4 without music",
+    "placeholder": "",
+    "name": "",
+    "id": "download-mp4-silent",
+    "cls": "btn ghost"
+  }
+]
